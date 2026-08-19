@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CloudPilot AI - Command Center OS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-text">CloudPilot</span>
+                    <span class="logo-badge">OS</span>
+                </div>
+            </div>
+            
+            <!-- Main OS Tabs -->
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-tab="dashboard">Dashboard</a>
+                <a href="#" class="nav-item" data-tab="graph">Topology Graph</a>
+                <a href="#" class="nav-item" data-tab="workspaces">Agent Workspaces</a>
+                <a href="#" class="nav-item" data-tab="recommendations">Optimization Center</a>
+                <a href="#" class="nav-item" data-tab="copilot">AI Copilot</a>
+                <a href="#" class="nav-item" data-tab="learning">Memory & Learning</a>
+                <div class="nav-divider"></div>
+                <button id="theme-toggle" class="btn btn-secondary theme-toggle-btn">Toggle Light Mode</button>
+            </nav>
+            
+            <div class="profile-summary">
+                <div class="avatar">C</div>
+                <div class="profile-info">
+                    <div class="profile-name">Operator Console</div>
+                    <div class="profile-role">Autonomous Controller</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace Area -->
+        <main class="workspace">
+            <!-- Top Header Bar -->
+            <header class="top-bar">
+                <div class="top-left">
+                    <div class="scenario-selector-container">
+                        <label for="enterprise-select">Cloud Scenario</label>
+                        <select id="enterprise-select" class="dropdown">
+                            <!-- Scenario Library (10 profiles) -->
+                            <option value="Startup">Startup Company</option>
+                            <option value="Healthcare">Healthcare Provider</option>
+                            <option value="Manufacturing">Manufacturing IoT</option>
+                            <option value="Gaming">Multiplayer Game Studio</option>
+                            <option value="AI Startup">AI Research Lab</option>
+                            <option value="SaaS">SaaS Platform Group</option>
+                            <option value="Financial Services">Financial Group</option>
+                            <option value="Government">Civic Administration</option>
+                            <option value="Media">VOD Streaming Network</option>
+                            <option value="Retail">Global E-commerce</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="top-right">
+                    <button id="story-mode-btn" class="btn btn-primary btn-spark">Start Story Mode Tour</button>
+                    <button id="start-demo-btn" class="btn btn-secondary">Scan Environment</button>
+                    <div class="badge-live-mode">Demo Mode</div>
+                </div>
+            </header>
+
+            <!-- Workspace Viewport -->
+            <div class="workspace-viewport">
+                
+                <!-- ==================== TAB: DASHBOARD ==================== -->
+                <div id="tab-dashboard" class="tab-panel active">
+                    <!-- 6 KPI metrics -->
+                    <section class="kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-label">Discovered Resources</div>
+                            <div id="kpi-resources" class="kpi-value">0</div>
+                            <div class="kpi-subtext">Across active providers</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Current Monthly Spend</div>
+                            <div id="kpi-cost" class="kpi-value">$0</div>
+                            <div class="kpi-subtext">Aggregated billing baseline</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Monthly Potential Savings</div>
+                            <div id="kpi-savings" class="kpi-value">$0</div>
+                            <div class="kpi-subtext">Target waste reduction</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Critical Security Risks</div>
+                            <div id="kpi-risks" class="kpi-value">0</div>
+                            <div class="kpi-subtext">Redundancy or SPOF alerts</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Logical Applications</div>
+                            <div id="kpi-apps" class="kpi-value">0</div>
+                            <div class="kpi-subtext">Service boundary graphs</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">AI Consensus Confidence</div>
+                            <div id="kpi-confidence" class="kpi-value">98.4%</div>
+                            <div class="kpi-subtext">Council voting threshold</div>
+                        </div>
+                    </section>
+
+                    <div class="layout-grid-dashboard">
+                        <!-- Left Column -->
+                        <div class="dashboard-left-col">
+                            <!-- Future Forecast -->
+                            <div class="panel">
+                                <h2 class="panel-title">Cloud Spend & Risk Forecast (No Action)</h2>
+                                <div class="forecast-grid">
+                                    <div class="forecast-card">
+                                        <div class="forecast-time">30 Days</div>
+                                        <div class="forecast-value warning">+6% cost</div>
+                                        <div class="forecast-risk">Risk: Low</div>
+                                    </div>
+                                    <div class="forecast-card">
+                                        <div class="forecast-time">90 Days</div>
+                                        <div class="forecast-value danger">+18% cost</div>
+                                        <div class="forecast-risk warning">Risk: Medium</div>
+                                    </div>
+                                    <div class="forecast-card">
+                                        <div class="forecast-time">365 Days</div>
+                                        <div class="forecast-value critical">+41% cost</div>
+                                        <div class="forecast-risk danger">Risk: Critical</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- AI Reasoning Pipeline -->
+                            <div class="panel">
+                                <h2 class="panel-title">AI Thinking Timeline</h2>
+                                <div class="pipeline-timeline select-timeline">
+                                    <!-- Steps populated dynamically or static hooks -->
+                                    <div class="pipeline-step" data-step="M1_IDA">
+                                        <div class="step-icon"></div>
+                                        <div class="step-details">
+                                            <div class="step-name">Infrastructure Scan (M1)</div>
+                                            <div class="step-status">Idle</div>
+                                        </div>
+                                    </div>
+                                    <div class="pipeline-step" data-step="M2_CIA">
+                                        <div class="step-icon"></div>
+                                        <div class="step-details">
+                                            <div class="step-name">Cost Baseline Analysis (M2)</div>
+                                            <div class="step-status">Idle</div>
+                                        </div>
+                                    </div>
+                                    <div class="pipeline-step" data-step="M3_AIA">
+                                        <div class="step-icon"></div>
+                                        <div class="step-details">
+                                            <div class="step-name">Application Mapping (M3)</div>
+                                            <div class="step-status">Idle</div>
+                                        </div>
+                                    </div>
+                                    <div class="pipeline-step" data-step="M4_RIA">
+                                        <div class="step-icon"></div>
+                                        <div class="step-details">
+                                            <div class="step-name">Risk Prediction Models (M4)</div>
+                                            <div class="step-status">Idle</div>
+                                        </div>
+                                    </div>
+                                    <div class="pipeline-step" data-step="M5_SA">
+                                        <div class="step-icon"></div>
+                                        <div class="step-details">
+                                            <div class="step-name">Strategy Generation (M5)</div>
+                                            <div class="step-status">Idle</div>
+                                        </div>
+                                    </div>
+                                    <div class="pipeline-step" data-step="M6_DTS">
+                                        <div class="step-icon"></div>
+                                        <div class="step-details">
+                                            <div class="step-name">Digital Twin Simulation (M6)</div>
+                                            <div class="step-status">Idle</div>
+                                        </div>
+                                    </div>
+                                    <div class="pipeline-step" data-step="M7_EE">
+                                        <div class="step-icon"></div>
+                                        <div class="step-details">
+                                            <div class="step-name">Explainability Check (M7)</div>
+                                            <div class="step-status">Idle</div>
+                                        </div>
+                                    </div>
+                                    <div class="pipeline-step" data-step="M8_LEA">
+                                        <div class="step-icon"></div>
+                                        <div class="step-details">
+                                            <div class="step-name">Continuous Learning Loop (M8)</div>
+                                            <div class="step-status">Idle</div>
+                                        </div>
+                                    </div>
+                                    <div class="pipeline-step" data-step="M9_DE">
+                                        <div class="step-icon"></div>
+                                        <div class="step-details">
+                                            <div class="step-name">Decision Council Review (M9)</div>
+                                            <div class="step-status">Idle</div>
+                                        </div>
+                                    </div>
+                                    <div class="pipeline-step" data-step="M10_AEA">
+                                        <div class="step-icon"></div>
+                                        <div class="step-details">
+                                            <div class="step-name">Autonomous Execution (M10)</div>
+                                            <div class="step-status">Idle</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column -->
+                        <div class="dashboard-right-col">
+                            <!-- Digital Twin Simulator -->
+                            <div class="panel">
+                                <h2 class="panel-title">Digital Twin Virtual Simulator</h2>
+                                <div class="twin-state-grid">
+                                    <div class="state-card">
+                                        <div class="state-title">Current SLA</div>
+                                        <div class="state-metric-val">99.1%</div>
+                                    </div>
+                                    <div class="state-card success">
+                                        <div class="state-title">Simulated SLA</div>
+                                        <div class="state-metric-val">99.99%</div>
+                                    </div>
+                                </div>
+                                <div class="twin-steps-list">
+                                    <div class="twin-step" id="twin-step-1">1. Virtual copy constructed</div>
+                                    <div class="twin-step" id="twin-step-2">2. Scaling modifications simulated</div>
+                                    <div class="twin-step" id="twin-step-3">3. Failure scenarios tested</div>
+                                    <div class="twin-step" id="twin-step-4">4. Reversion validated</div>
+                                </div>
+                                <button id="run-twin-simulation-btn" class="btn btn-primary" style="width: 100%; margin-top: 15px;">Execute Simulation Run</button>
+                            </div>
+
+                            <!-- Live Agent Feed -->
+                            <div class="panel">
+                                <h2 class="panel-title">Live Agent Activity Log</h2>
+                                <ul id="live-activity-log" class="activity-feed">
+                                    <li class="feed-item">
+                                        <span class="feed-time">SYSTEM</span>
+                                        <span class="feed-text">Autonomous operating system is initialized. Waiting...</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== TAB: TOPOLOGY GRAPH ==================== -->
+                <div id="tab-graph" class="tab-panel">
+                    <div class="graph-layout">
+                        <div class="graph-canvas-container">
+                            <div class="graph-header">Interactive Infrastructure Map</div>
+                            <svg id="infra-svg" width="100%" height="450px"></svg>
+                        </div>
+                        <div id="graph-details-panel" class="graph-details-panel">
+                            <h3 class="panel-subtitle">Resource Inspector</h3>
+                            <div class="empty-state">Click on any map node to load parameters.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== TAB: WORKSPACES ==================== -->
+                <div id="tab-workspaces" class="tab-panel">
+                    <div class="workspace-tabs-header">
+                        <button class="agent-tab-btn active" data-agent="infra">Discovery Agent (M1)</button>
+                        <button class="agent-tab-btn" data-agent="cost">Cost Agent (M2)</button>
+                        <button class="agent-tab-btn" data-agent="app">Application Agent (M3)</button>
+                        <button class="agent-tab-btn" data-agent="risk">Risk Agent (M4)</button>
+                        <button class="agent-tab-btn" data-agent="council">Decision Council (M9)</button>
+                    </div>
+
+                    <div id="agent-workspace-body" class="panel workspace-body">
+                        <!-- Content populated dynamically via app.js -->
+                    </div>
+                </div>
+
+                <!-- ==================== TAB: RECOMMENDATIONS ==================== -->
+                <div id="tab-recommendations" class="tab-panel">
+                    <div class="recommendations-header">
+                        <div class="sorting-controls">
+                            <span>Sort By:</span>
+                            <button class="btn btn-secondary active sort-btn" data-sort="savings">Monthly Savings</button>
+                            <button class="btn btn-secondary sort-btn" data-sort="risk">Risk Level</button>
+                            <button class="btn btn-secondary sort-btn" data-sort="confidence">Confidence</button>
+                        </div>
+                    </div>
+                    <div id="recommendation-center-grid" class="recommendation-center-grid">
+                        <!-- Dynamic recommendations -->
+                    </div>
+                </div>
+
+                <!-- ==================== TAB: COPILOT ==================== -->
+                <div id="tab-copilot" class="tab-panel">
+                    <div class="copilot-container">
+                        <div class="copilot-messages-box" id="copilot-chat-history">
+                            <div class="copilot-message agent">
+                                Hello! I am your CloudPilot Copilot. I have access to your topology graphs, daily logs, strategy matrices, and Decision records. Ask me anything!
+                            </div>
+                        </div>
+                        
+                        <div class="copilot-suggestions">
+                            <button class="suggestion-chip">Why is my bill increasing?</button>
+                            <button class="suggestion-chip">Find idle GPUs.</button>
+                            <button class="suggestion-chip">Can we save 20%?</button>
+                            <button class="suggestion-chip">Show risky applications.</button>
+                        </div>
+
+                        <form id="copilot-query-form" class="copilot-input-bar">
+                            <input type="text" id="copilot-input-field" placeholder="Ask Copilot a question..." required autocomplete="off" />
+                            <button type="submit" class="btn btn-primary">Send</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- ==================== TAB: LEARNING ==================== -->
+                <div id="tab-learning" class="tab-panel">
+                    <div class="learning-kpis">
+                        <div class="kpi-card">
+                            <div class="kpi-label">Completed Optimizations</div>
+                            <div class="kpi-value">187</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Success Rate</div>
+                            <div class="kpi-value success">97.3%</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Rollback Rate</div>
+                            <div class="kpi-value danger">1.8%</div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <h2 class="panel-title">Recent Lessons Learned (Cloud DNA)</h2>
+                        <ul class="lessons-list">
+                            <li class="lesson-item">
+                                <strong>Payment API replicas rule:</strong> M8 learned that the Payment API service experiences service interruptions below 3 replicas. Minimum autoscaler limit configured to 3.
+                            </li>
+                            <li class="lesson-item">
+                                <strong>GPU off-hour scaling:</strong> ML cluster nodes should scale down at 19:00 to conserve budget. Peak training activity happens 09:00 - 18:00.
+                            </li>
+                            <li class="lesson-item">
+                                <strong>Compliance regions validation:</strong> Resources containing database logs must adhere to regional policies (`eu-west-1` only) to satisfy GDPR compliance.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

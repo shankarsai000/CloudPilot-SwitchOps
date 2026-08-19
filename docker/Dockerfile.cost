@@ -1,0 +1,68 @@
+# Multi-stage Docker build for Cost Intelligence Agent
+
+# Stage 1: Builder
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements-cost.txt .
+
+# Build wheels
+RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements-cost.txt
+
+# Stage 2: Runtime
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy wheels from builder
+COPY --from=builder /app/wheels /wheels
+
+# Install wheels
+RUN pip install --no-cache-dir /wheels/*
+
+# Copy application code
+COPY models_cost.py .
+COPY aws_billing_adapter.py .
+COPY azure_billing_adapter.py .
+COPY gcp_billing_adapter.py .
+COPY cost_correlator.py .
+COPY anomaly_detector.py .
+COPY cost_forecaster.py .
+COPY cost_agent.py .
+COPY cost_repository.py .
+COPY cost_routes.py .
+COPY cost_access_control.py .
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+
+# Environment
+ENV PYTHONUNBUFFERED=1
+ENV LOG_LEVEL=INFO
+
+# Expose port
+EXPOSE 8000
+
+# Run with gunicorn
+CMD ["gunicorn", \
+    "--bind", "0.0.0.0:8000", \
+    "--workers", "4", \
+    "--worker-class", "uvicorn.workers.UvicornWorker", \
+    "--access-logfile", "-", \
+    "--error-logfile", "-", \
+    "--log-level", "info", \
+    "cost_service:app"]
