@@ -16,6 +16,13 @@ from typing import Optional
 
 from models_resource import CloudResource, DependencyEdge, ResourceGraph, ResourceType
 
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    psycopg2 = None
+    RealDictCursor = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,11 +50,8 @@ class ResourceRepository:
         Raises:
             RepositoryError: If psycopg2 not installed
         """
-        try:
-            import psycopg2
-            from psycopg2.extras import RealDictCursor
-        except ImportError as e:
-            raise RepositoryError("psycopg2 required for PostgreSQL support") from e
+        if psycopg2 is None:
+            raise RepositoryError("psycopg2 required for PostgreSQL support")
 
         self.connection_string = connection_string
         self.psycopg2 = psycopg2

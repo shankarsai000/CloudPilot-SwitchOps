@@ -85,14 +85,14 @@ class PolicyValidator:
         else:
             checks_passed.append("Business hours: non-production or safe action")
 
-        # 3. Maintenance window check
+        # 3. Maintenance window check (enforced for production)
         weekday = now.weekday()
-        if weekday not in self.maintenance_days:
+        if is_production and weekday not in self.maintenance_days:
             violations.append(
                 f"MAINTENANCE_WINDOW: Today ({weekday}) is not within allowed maintenance days."
             )
         else:
-            checks_passed.append("Maintenance window: within allowed days")
+            checks_passed.append("Maintenance window: within allowed days or non-production")
 
         # 4. Regional policy check
         if region in self.restricted_regions:

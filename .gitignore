@@ -42,3 +42,6 @@ Thumbs.db
 # Docker & Environment
 *.log
 .env
+docker/scratch/
+scratch/
+

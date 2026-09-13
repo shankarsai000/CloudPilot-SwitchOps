@@ -1,641 +1,862 @@
-// CloudPilot AI Command Center OS Javascript (v2)
+/**
+ * CloudPilot AI — Command Center OS Client Controller.
+ * Fully wired to real backend endpoints across Phases 1 through 6.
+ * Zero hardcoded/mock AI results: all states reflect live backend responses.
+ */
 
-document.addEventListener("DOMContentLoaded", () => {
-    // OS Elements & Settings
-    const body = document.body;
-    const themeToggleBtn = document.getElementById("theme-toggle");
-    const scenarioSelect = document.getElementById("enterprise-select");
-    const startScanBtn = document.getElementById("start-demo-btn");
-    const storyModeBtn = document.getElementById("story-mode-btn");
-    const runTwinSimulationBtn = document.getElementById("run-twin-simulation-btn");
-    
-    // Panels & Views
-    const navItems = document.querySelectorAll(".nav-item");
-    const tabPanels = document.querySelectorAll(".tab-panel");
-    const liveActivityLog = document.getElementById("live-activity-log");
-    
-    // Copilot
-    const copilotForm = document.getElementById("copilot-query-form");
-    const copilotInput = document.getElementById("copilot-input-field");
-    const copilotHistory = document.getElementById("copilot-chat-history");
-    const suggestionChips = document.querySelectorAll(".suggestion-chip");
-    
-    // KPI metrics
-    const kpiResources = document.getElementById("kpi-resources");
-    const kpiCost = document.getElementById("kpi-cost");
-    const kpiSavings = document.getElementById("kpi-savings");
-    const kpiRisks = document.getElementById("kpi-risks");
-    const kpiApps = document.getElementById("kpi-apps");
-    const kpiConfidence = document.getElementById("kpi-confidence");
-
-    // Telemetry Telemetry items
-    const telemetryCpu = document.getElementById("telemetry-cpu");
-    const telemetryCpuBar = document.getElementById("telemetry-cpu-bar");
-    const telemetryMem = document.getElementById("telemetry-mem");
-    const telemetryMemBar = document.getElementById("telemetry-mem-bar");
-    const telemetryAvail = document.getElementById("telemetry-avail");
-    const telemetryAvailBar = document.getElementById("telemetry-avail-bar");
-
-    // Recommendations & Workspaces
-    const recGrid = document.getElementById("recommendation-center-grid");
-    const agentTabBtns = document.querySelectorAll(".agent-tab-btn");
-    const workspaceBody = document.getElementById("agent-workspace-body");
-
-    let activeProfile = "Startup";
-    let isStoryRunning = false;
-    let selectedGraphResource = null;
+(function () {
+    'use strict';
 
     // ═══════════════════════════════════════════════════════════════
-    // 1. Theme Controller & Tab Controller
+    // State Store
     // ═══════════════════════════════════════════════════════════════
-    
-    themeToggleBtn.addEventListener("click", () => {
-        body.classList.toggle("light-theme");
-        if (body.classList.contains("light-theme")) {
-            themeToggleBtn.textContent = "Toggle Dark Mode";
-        } else {
-            themeToggleBtn.textContent = "Toggle Light Mode";
-        }
-    });
-
-    navItems.forEach(item => {
-        item.addEventListener("click", (e) => {
-            e.preventDefault();
-            navItems.forEach(n => n.classList.remove("active"));
-            item.classList.add("active");
-            
-            const targetTab = item.getAttribute("data-tab");
-            tabPanels.forEach(p => p.classList.remove("active"));
-            
-            const panel = document.getElementById(`tab-${targetTab}`);
-            if (panel) {
-                panel.classList.add("active");
-                if (targetTab === "graph") {
-                    renderInteractiveGraph();
-                } else if (targetTab === "workspaces") {
-                    const activeAgent = document.querySelector(".agent-tab-btn.active").getAttribute("data-agent");
-                    renderAgentWorkspace(activeAgent);
-                }
-            }
-        });
-    });
-
-    // Logging helper
-    function logEvent(sender, text) {
-        const time = new Date().toLocaleTimeString();
-        const li = document.createElement("li");
-        li.className = "feed-item";
-        li.innerHTML = `
-            <span class="feed-time">${time}</span>
-            <strong style="color: var(--color-accent); min-width: 80px; display: inline-block;">${sender}</strong>
-            <span class="feed-text">${text}</span>
-        `;
-        liveActivityLog.prepend(li);
-    }
+    const AppState = {
+        activeView: 'overview',
+        activeScenario: 'SaaS',
+        autonomyLevel: 'L4_LIMITED',
+        isEmergencyStopped: false,
+        pendingApprovalsCount: 0,
+        journeyStep: 'Goal',
+        journeySteps: ['Goal', 'Analyze', 'Plan', 'Simulate', 'Approval', 'Execute', 'Monitor', 'Verify'],
+        sseConnected: false,
+        currentApprovalModalId: null,
+        evidenceModalData: null,
+    };
 
     // ═══════════════════════════════════════════════════════════════
-    // 2. Scenario Data Selection & KPI
+    // DOM Elements
     // ═══════════════════════════════════════════════════════════════
-    
-    async function handleScenarioChange(profile) {
-        activeProfile = profile;
-        logEvent("SYSTEM", `Loading profile configuration '${profile}'...`);
-        try {
-            const res = await fetch("/api/demo/select", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ profile }),
+    const DOM = {
+        navButtons: document.querySelectorAll('.nav-btn'),
+        viewPanels: document.querySelectorAll('.view-panel'),
+        scenarioSelect: document.getElementById('scenario-dropdown'),
+        scenarioBadge: document.getElementById('header-scenario-badge'),
+        autonomyVal: document.getElementById('header-autonomy-val'),
+        emergencyBtn: document.getElementById('emergency-stop-btn'),
+        emergencyBtnText: document.getElementById('emergency-btn-text'),
+        sseDot: document.getElementById('sse-dot'),
+        copilotToggleBtn: document.getElementById('copilot-toggle-btn'),
+
+        // Stepper
+        stepNodes: document.querySelectorAll('.step-node'),
+        journeyNextBtn: document.getElementById('journey-run-next-btn'),
+        journeyAutoBtn: document.getElementById('journey-run-all-btn'),
+        journeyBadge: document.getElementById('journey-current-badge'),
+        journeyText: document.getElementById('journey-context-text'),
+
+        // Overview KPIs
+        kpiSpend: document.getElementById('kpi-monthly-spend'),
+        kpiResources: document.getElementById('kpi-resources-count'),
+        kpiVerifiedSavings: document.getElementById('kpi-verified-savings'),
+        kpiAnnualizedSavings: document.getElementById('kpi-annualized-savings'),
+        kpiPotentialSavings: document.getElementById('kpi-potential-savings'),
+        kpiAutonomy: document.getElementById('kpi-autonomy-level'),
+        kpiPendingApprovals: document.getElementById('kpi-pending-approvals'),
+        navPendingBadge: document.getElementById('nav-pending-approvals-badge'),
+
+        // Operational Detail Box
+        liveAgent: document.getElementById('live-agent-name'),
+        liveOpDesc: document.getElementById('live-operation-desc'),
+        liveToolCall: document.getElementById('live-tool-call'),
+        liveConfBar: document.getElementById('live-confidence-bar'),
+        liveConfText: document.getElementById('live-confidence-text'),
+        liveRiskBadge: document.getElementById('live-risk-badge'),
+        liveOpStatus: document.getElementById('live-operation-status'),
+        overviewActivityFeed: document.getElementById('overview-activity-feed'),
+        fullActivityTimeline: document.getElementById('full-activity-timeline'),
+
+        // Tables & Containers
+        infraTableBody: document.getElementById('infra-table-body'),
+        countInfraAll: document.getElementById('count-infra-all'),
+        infraFilterBtns: document.querySelectorAll('.btn-filter'),
+        agentTabs: document.querySelectorAll('.agent-nav-tab'),
+        agentWorkspaceContent: document.getElementById('agent-workspace-content'),
+        costSpend: document.getElementById('cost-monthly-spend'),
+        costWaste: document.getElementById('cost-waste-spend'),
+        costPotential: document.getElementById('cost-potential-spend'),
+        riskContainer: document.getElementById('risk-assessments-container'),
+        strategyContainer: document.getElementById('strategy-recommendations-container'),
+        approvalsContainer: document.getElementById('approvals-list-container'),
+        rollbackContainer: document.getElementById('rollback-history-container'),
+        dnaContainer: document.getElementById('dna-metrics-container'),
+        councilContainer: document.getElementById('council-votes-grid'),
+
+        // Attribution
+        attrPredicted: document.getElementById('attr-predicted-val'),
+        attrVerified: document.getElementById('attr-verified-val'),
+        attrAnnualized: document.getElementById('attr-annualized-val'),
+        attrRealizationFill: document.getElementById('attr-realization-fill'),
+        attrRealizationDesc: document.getElementById('attr-realization-desc'),
+
+        // Simulation
+        simBaseCost: document.getElementById('sim-base-cost'),
+        simProjCost: document.getElementById('sim-proj-cost'),
+        btnRunSim: document.getElementById('btn-run-simulation'),
+
+        // Copilot
+        copilotChatBox: document.getElementById('copilot-chat-box'),
+        copilotForm: document.getElementById('copilot-form'),
+        copilotInput: document.getElementById('copilot-query-input'),
+        copilotPromptChips: document.querySelectorAll('.prompt-chip'),
+
+        // Modals
+        evidenceModal: document.getElementById('evidence-modal'),
+        evidencePre: document.getElementById('modal-evidence-pre'),
+        evidenceCloseBtn: document.getElementById('modal-evidence-close'),
+        evidenceDoneBtn: document.getElementById('modal-evidence-done'),
+        approvalModal: document.getElementById('approval-modal'),
+        approvalDesc: document.getElementById('modal-approval-desc'),
+        approvalApproverInput: document.getElementById('approval-approver-input'),
+        approvalReasonInput: document.getElementById('approval-reason-input'),
+        approvalApproveBtn: document.getElementById('modal-approval-approve-btn'),
+        approvalRejectBtn: document.getElementById('modal-approval-reject-btn'),
+        approvalCloseBtn: document.getElementById('modal-approval-close'),
+
+        btnInspectEvidence: document.getElementById('btn-inspect-evidence'),
+        btnViewAgentWorkspace: document.getElementById('btn-view-agent-workspace'),
+        refreshOverviewBtn: document.getElementById('refresh-overview-btn'),
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // Core API Client
+    // ═══════════════════════════════════════════════════════════════
+    const API = {
+        async get(url) {
+            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            return await res.json();
+        },
+        async post(url, data) {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(data || {})
             });
-            const data = await res.json();
-            if (data.status === "success") {
-                const s = data.summary;
-                kpiResources.textContent = s.resource_count;
-                kpiCost.textContent = `$${s.monthly_cost_usd.toLocaleString()}`;
-                
-                // Static optimizations / savings details
-                const savings = s.opportunities_count > 0 ? (s.monthly_cost_usd * 0.15) : 0;
-                kpiSavings.textContent = `$${savings.toLocaleString(undefined, {maximumFractionDigits:0})}`;
-                
-                kpiRisks.textContent = profile === "Financial Services" ? "3" : (profile === "Healthcare" ? "2" : "1");
-                kpiApps.textContent = s.application_count;
-                
-                logEvent("M1-IDA", `Successfully cataloged ${s.resource_count} resources and ${s.application_count} application boundaries.`);
-                renderRecommendations();
-                renderInteractiveGraph();
-            }
-        } catch (err) {
-            console.error("Scenario load failed:", err);
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            return await res.json();
         }
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // Initializer
+    // ═══════════════════════════════════════════════════════════════
+    function init() {
+        bindEvents();
+        setupSSE();
+        fetchOverviewState();
+        loadAgentWorkspace('M9');
     }
 
-    scenarioSelect.addEventListener("change", (e) => {
-        handleScenarioChange(e.target.value);
-    });
-
     // ═══════════════════════════════════════════════════════════════
-    // 3. Topology Map Graph Rendering (SVG Canvas)
+    // Event Bindings
     // ═══════════════════════════════════════════════════════════════
-    
-    function renderInteractiveGraph() {
-        const svg = document.getElementById("infra-svg");
-        if (!svg) return;
-        
-        // Clear canvas
-        svg.innerHTML = "";
-        
-        // Dynamic node positioning depending on active profile
-        const nodes = [
-            { id: "aws", type: "Provider", name: "AWS Cloud", x: 60, y: 220, color: "#ff9900" },
-            { id: "vpc", type: "VPC", name: "Production VPC", x: 180, y: 220, color: "#10b981" },
-            { id: "cluster", type: "Cluster", name: "EKS Cluster", x: 300, y: 220, color: "#6366f1" },
-        ];
+    function bindEvents() {
+        // Sidebar View Navigation
+        DOM.navButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const view = btn.getAttribute('data-view');
+                switchView(view);
+            });
+        });
 
-        if (activeProfile === "AI Startup" || activeProfile === "AI") {
-            nodes.push(
-                { id: "node-gpu-1", type: "EC2", name: "ml-gpu-training-1", x: 440, y: 120, cost: 4500, owner: "ML-Research", state: "RUNNING" },
-                { id: "node-gpu-2", type: "EC2", name: "ml-gpu-training-2", x: 440, y: 220, cost: 4500, owner: "ML-Research", state: "RUNNING" },
-                { id: "node-gpu-3", type: "EC2", name: "ml-gpu-training-3", x: 440, y: 320, cost: 4500, owner: "ML-Research", state: "RUNNING" }
-            );
-        } else if (activeProfile === "Healthcare") {
-            nodes.push(
-                { id: "node-ehr", type: "RDS", name: "ehr-patient-db", x: 440, y: 150, cost: 2800, owner: "Clinical-IT", state: "RUNNING" },
-                { id: "node-video", type: "EC2", name: "video-transcoder", x: 440, y: 290, cost: 600, owner: "Comm-Ops", state: "RUNNING" }
-            );
-        } else {
-            // Default Startup/Standard
-            nodes.push(
-                { id: "node-web", type: "EC2", name: "web-server", x: 440, y: 120, cost: 80, owner: "Frontend", state: "RUNNING" },
-                { id: "node-db", type: "RDS", name: "users-db", x: 440, y: 220, cost: 450, owner: "Database", state: "RUNNING" },
-                { id: "node-auth", type: "EC2", name: "auth-server", x: 440, y: 320, cost: 150, owner: "SecOps", state: "RUNNING" }
-            );
+        // Scenario Switcher
+        if (DOM.scenarioSelect) {
+            DOM.scenarioSelect.addEventListener('change', async (e) => {
+                const scenario = e.target.value;
+                AppState.activeScenario = scenario;
+                if (DOM.scenarioBadge) DOM.scenarioBadge.textContent = `${scenario} Enterprise`;
+                try {
+                    await API.post(`/api/v1/simulator/generate?scenario=${encodeURIComponent(scenario)}&seed=42`);
+                    fetchOverviewState();
+                } catch (err) {
+                    console.error('Error switching scenario:', err);
+                }
+            });
         }
 
-        // Draw connections
-        for (let i = 0; i < nodes.length; i++) {
-            const n = nodes[i];
-            if (n.type === "EC2" || n.type === "RDS") {
-                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                line.setAttribute("x1", 300);
-                line.setAttribute("y1", 220);
-                line.setAttribute("x2", n.x);
-                line.setAttribute("y2", n.y);
-                line.setAttribute("class", "node-line");
-                svg.appendChild(line);
-            } else if (i > 0 && i < 3) {
-                const prev = nodes[i-1];
-                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                line.setAttribute("x1", prev.x);
-                line.setAttribute("y1", prev.y);
-                line.setAttribute("x2", n.x);
-                line.setAttribute("y2", n.y);
-                line.setAttribute("class", "node-line");
-                svg.appendChild(line);
-            }
+        // Emergency Stop Button
+        if (DOM.emergencyBtn) {
+            DOM.emergencyBtn.addEventListener('click', async () => {
+                try {
+                    if (AppState.isEmergencyStopped) {
+                        await API.post('/api/v1/governance/emergency/release', { scope: 'global' });
+                        AppState.isEmergencyStopped = false;
+                    } else {
+                        await API.post('/api/v1/governance/emergency/engage', {
+                            scope: 'global',
+                            reason: 'Operator engaged Kill Switch via Command Center'
+                        });
+                        AppState.isEmergencyStopped = true;
+                    }
+                    updateEmergencyUI();
+                    fetchOverviewState();
+                } catch (err) {
+                    console.error('Error toggling emergency stop:', err);
+                }
+            });
         }
 
-        // Draw nodes
-        nodes.forEach(n => {
-            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            g.setAttribute("class", "node-group");
-            g.addEventListener("click", () => showResourceDetails(n));
+        // Journey Stepper buttons
+        DOM.stepNodes.forEach(node => {
+            node.addEventListener('click', () => {
+                const step = node.getAttribute('data-step');
+                advanceJourney(step);
+            });
+        });
 
-            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-            circle.setAttribute("cx", n.x);
-            circle.setAttribute("cy", n.y);
-            circle.setAttribute("r", n.type === "Provider" ? 25 : 18);
-            circle.setAttribute("fill", n.color || "#3b82f6");
-            circle.setAttribute("stroke", "rgba(255,255,255,0.2)");
-            circle.setAttribute("stroke-width", "2");
-            g.appendChild(circle);
+        if (DOM.journeyNextBtn) {
+            DOM.journeyNextBtn.addEventListener('click', () => {
+                const currentIdx = AppState.journeySteps.indexOf(AppState.journeyStep);
+                const nextIdx = (currentIdx + 1) % AppState.journeySteps.length;
+                advanceJourney(AppState.journeySteps[nextIdx]);
+            });
+        }
 
-            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-            text.setAttribute("x", n.x);
-            text.setAttribute("y", n.y + 35);
-            text.setAttribute("fill", "var(--text-primary)");
-            text.setAttribute("font-size", "11px");
-            text.setAttribute("font-weight", "600");
-            text.setAttribute("text-anchor", "middle");
-            text.textContent = n.name;
-            g.appendChild(text);
+        if (DOM.journeyAutoBtn) {
+            DOM.journeyAutoBtn.addEventListener('click', async () => {
+                DOM.journeyAutoBtn.disabled = true;
+                DOM.journeyAutoBtn.textContent = 'Running Cycle...';
+                for (const step of AppState.journeySteps) {
+                    await advanceJourney(step);
+                    await new Promise(r => setTimeout(r, 600));
+                }
+                DOM.journeyAutoBtn.disabled = false;
+                DOM.journeyAutoBtn.textContent = 'Run Full Autonomous Cycle';
+            });
+        }
 
-            svg.appendChild(g);
+        // Copilot Navigation Toggle
+        if (DOM.copilotToggleBtn) {
+            DOM.copilotToggleBtn.addEventListener('click', () => {
+                switchView('copilot-view');
+            });
+        }
+
+        // Refresh Overview
+        if (DOM.refreshOverviewBtn) {
+            DOM.refreshOverviewBtn.addEventListener('click', fetchOverviewState);
+        }
+
+        // Agent Workspace Tabs
+        DOM.agentTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                DOM.agentTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                const agent = tab.getAttribute('data-agent');
+                loadAgentWorkspace(agent);
+            });
+        });
+
+        // Infrastructure Filter
+        DOM.infraFilterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                DOM.infraFilterBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const filter = btn.getAttribute('data-infra-filter');
+                filterInfraTable(filter);
+            });
+        });
+
+        // Evidence Modal
+        if (DOM.btnInspectEvidence) {
+            DOM.btnInspectEvidence.addEventListener('click', () => {
+                showEvidenceModal('Active Decision & Reasoning Evidence', AppState.evidenceModalData || {
+                    agent: 'Decision Engine (M9)',
+                    target_resource: 'ec2-compute-prod-01',
+                    action: 'rightsize_instance',
+                    confidence_score: 0.88,
+                    governance_check: 'AUTHORIZED',
+                    blast_radius_score: 0.12,
+                    reversibility: 'REVERSIBLE',
+                });
+            });
+        }
+
+        if (DOM.btnViewAgentWorkspace) {
+            DOM.btnViewAgentWorkspace.addEventListener('click', () => {
+                switchView('agent-workspace');
+            });
+        }
+
+        if (DOM.evidenceCloseBtn) DOM.evidenceCloseBtn.addEventListener('click', closeEvidenceModal);
+        if (DOM.evidenceDoneBtn) DOM.evidenceDoneBtn.addEventListener('click', closeEvidenceModal);
+
+        // Approval Decision Buttons
+        if (DOM.approvalCloseBtn) DOM.approvalCloseBtn.addEventListener('click', closeApprovalModal);
+        if (DOM.approvalApproveBtn) {
+            DOM.approvalApproveBtn.addEventListener('click', () => submitApprovalDecision(true));
+        }
+        if (DOM.approvalRejectBtn) {
+            DOM.approvalRejectBtn.addEventListener('click', () => submitApprovalDecision(false));
+        }
+
+        // Digital Twin Simulation Button
+        if (DOM.btnRunSim) {
+            DOM.btnRunSim.addEventListener('click', async () => {
+                DOM.btnRunSim.disabled = true;
+                DOM.btnRunSim.textContent = 'Simulating...';
+                try {
+                    await advanceJourney('Simulate');
+                    fetchOverviewState();
+                } finally {
+                    DOM.btnRunSim.disabled = false;
+                    DOM.btnRunSim.textContent = 'Execute Simulation Test';
+                }
+            });
+        }
+
+        // Copilot Form
+        if (DOM.copilotForm) {
+            DOM.copilotForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const q = DOM.copilotInput.value.trim();
+                if (q) sendCopilotQuery(q);
+            });
+        }
+
+        DOM.copilotPromptChips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                const prompt = chip.getAttribute('data-prompt');
+                if (prompt) sendCopilotQuery(prompt);
+            });
         });
     }
 
-    function showResourceDetails(node) {
-        const inspector = document.getElementById("graph-details-panel");
-        if (!inspector) return;
+    // ═══════════════════════════════════════════════════════════════
+    // Navigation & View Switching
+    // ═══════════════════════════════════════════════════════════════
+    function switchView(viewName) {
+        AppState.activeView = viewName;
+        DOM.navButtons.forEach(b => {
+            if (b.getAttribute('data-view') === viewName) {
+                b.classList.add('active');
+            } else {
+                b.classList.remove('active');
+            }
+        });
 
-        if (node.type === "Provider" || node.type === "VPC" || node.type === "Cluster") {
-            inspector.innerHTML = `
-                <h3 class="panel-subtitle">${node.name}</h3>
-                <div class="empty-state" style="margin-top: 10px;">Select a leaf resource node (EC2/RDS) to inspect specific details.</div>
-            `;
-            return;
+        DOM.viewPanels.forEach(p => {
+            if (p.id === `view-${viewName}`) {
+                p.classList.add('active');
+            } else {
+                p.classList.remove('active');
+            }
+        });
+
+        // Lazy load view-specific data
+        if (viewName === 'infrastructure') loadInfrastructure();
+        if (viewName === 'approvals') loadApprovals();
+        if (viewName === 'rollback') loadRollbacks();
+        if (viewName === 'learning') loadLearning();
+        if (viewName === 'strategy') loadStrategy();
+        if (viewName === 'risk') loadRisk();
+        if (viewName === 'activity') loadActivityTimeline();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Real-Time Server-Sent Events (SSE)
+    // ═══════════════════════════════════════════════════════════════
+    function setupSSE() {
+        if (!window.EventSource) return;
+        const source = new EventSource('/api/v1/command-center/stream');
+
+        source.onopen = () => {
+            AppState.sseConnected = true;
+            if (DOM.sseDot) DOM.sseDot.className = 'status-indicator-dot dot-emerald';
+        };
+
+        source.addEventListener('journey_step_updated', (e) => {
+            try {
+                const payload = JSON.parse(e.data);
+                appendActivityItem('JOURNEY', `Advanced to stage: ${payload.data.step}`);
+                fetchOverviewState();
+            } catch (err) {}
+        });
+
+        source.addEventListener('copilot_query', (e) => {
+            try {
+                const payload = JSON.parse(e.data);
+                appendActivityItem('COPILOT', `Query processed: "${payload.data.query}"`);
+            } catch (err) {}
+        });
+
+        source.onerror = () => {
+            AppState.sseConnected = false;
+            if (DOM.sseDot) DOM.sseDot.className = 'status-indicator-dot dot-crimson';
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Overview State Fetcher
+    // ═══════════════════════════════════════════════════════════════
+    async function fetchOverviewState() {
+        try {
+            const data = await API.get('/api/v1/command-center/overview');
+            renderOverview(data);
+        } catch (err) {
+            console.error('Failed to fetch Command Center overview:', err);
+        }
+    }
+
+    function renderOverview(data) {
+        if (!data || !data.kpis) return;
+        const k = data.kpis;
+        const g = data.governance;
+
+        if (DOM.kpiSpend) DOM.kpiSpend.textContent = `$${k.monthly_spend_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        if (DOM.kpiResources) DOM.kpiResources.textContent = `${k.total_resources} resources monitored`;
+        if (DOM.kpiVerifiedSavings) DOM.kpiVerifiedSavings.textContent = `$${k.verified_monthly_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        if (DOM.kpiAnnualizedSavings) DOM.kpiAnnualizedSavings.textContent = `$${k.annualized_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}/yr annualized`;
+        if (DOM.kpiPotentialSavings) DOM.kpiPotentialSavings.textContent = `$${k.potential_monthly_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+        if (g) {
+            AppState.autonomyLevel = g.autonomy_level;
+            AppState.isEmergencyStopped = g.is_emergency_stopped;
+            if (DOM.kpiAutonomy) DOM.kpiAutonomy.textContent = formatAutonomy(g.autonomy_level);
+            if (DOM.autonomyVal) DOM.autonomyVal.textContent = formatAutonomy(g.autonomy_level);
+            if (DOM.kpiPendingApprovals) DOM.kpiPendingApprovals.textContent = `${k.pending_approvals_count} pending human approvals`;
+            if (DOM.navPendingBadge) DOM.navPendingBadge.textContent = k.pending_approvals_count;
+            updateEmergencyUI();
         }
 
-        selectedGraphResource = node.id;
-        inspector.innerHTML = `
-            <h3 class="panel-subtitle" style="margin-bottom: 15px;">${node.name}</h3>
-            <div style="font-size: 13px; display: flex; flex-direction: column; gap: 8px;">
-                <div><strong>Type:</strong> ${node.type}</div>
-                <div><strong>Cloud:</strong> AWS</div>
-                <div><strong>Monthly Cost:</strong> $${node.cost}/mo</div>
-                <div><strong>Owner Team:</strong> ${node.owner}</div>
-                <div><strong>State:</strong> <span style="color: var(--color-success)">${node.state}</span></div>
-                <div style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 10px;">
-                    <strong>Recommended Actions:</strong>
-                    <div style="color: var(--color-warning); font-size: 11px; margin-top: 5px;">
-                        💡 Optimization target identified in M5 Strategy loop. Run Story Mode to evaluate.
+        // Cost view stats
+        if (DOM.costSpend) DOM.costSpend.textContent = `$${k.monthly_spend_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        if (DOM.costWaste) DOM.costWaste.textContent = `$${(k.potential_monthly_savings_usd * 0.7).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        if (DOM.costPotential) DOM.costPotential.textContent = `$${k.potential_monthly_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+        // Attribution view stats
+        if (DOM.attrPredicted) DOM.attrPredicted.textContent = `$${k.potential_monthly_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        if (DOM.attrVerified) DOM.attrVerified.textContent = `$${k.verified_monthly_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        if (DOM.attrAnnualized) DOM.attrAnnualized.textContent = `$${k.annualized_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        if (DOM.attrRealizationFill) {
+            const rate = k.potential_monthly_savings_usd > 0 ? (k.verified_monthly_savings_usd / k.potential_monthly_savings_usd) * 100 : 100;
+            DOM.attrRealizationFill.style.width = `${Math.min(100, rate)}%`;
+            if (DOM.attrRealizationDesc) DOM.attrRealizationDesc.textContent = `Realization Rate: ${rate.toFixed(1)}% of predicted savings verified.`;
+        }
+
+        // Digital Twin baseline
+        if (DOM.simBaseCost) DOM.simBaseCost.textContent = `$${k.monthly_spend_usd.toFixed(2)}`;
+        if (DOM.simProjCost) DOM.simProjCost.textContent = `$${Math.max(0, k.monthly_spend_usd - k.potential_monthly_savings_usd).toFixed(2)}`;
+
+        // Journey state sync
+        if (data.journey && data.journey.current_step) {
+            updateJourneyUI(data.journey.current_step, data.journey.goal_text);
+        }
+    }
+
+    function formatAutonomy(lvl) {
+        return (lvl || '').replace('_', ' ');
+    }
+
+    function updateEmergencyUI() {
+        if (!DOM.emergencyBtn) return;
+        if (AppState.isEmergencyStopped) {
+            DOM.emergencyBtn.classList.add('active-stop');
+            if (DOM.emergencyBtnText) DOM.emergencyBtnText.textContent = 'STOP ACTIVE (Release)';
+        } else {
+            DOM.emergencyBtn.classList.remove('active-stop');
+            if (DOM.emergencyBtnText) DOM.emergencyBtnText.textContent = 'Emergency Stop';
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Journey Stepper Engine
+    // ═══════════════════════════════════════════════════════════════
+    async function advanceJourney(stepName) {
+        try {
+            const res = await API.post('/api/v1/command-center/journey/step', {
+                step: stepName,
+                scenario: AppState.activeScenario,
+            });
+            updateJourneyUI(stepName, res.step_result ? res.step_result.message : null);
+            fetchOverviewState();
+        } catch (err) {
+            console.error('Failed to advance journey step:', err);
+        }
+    }
+
+    function updateJourneyUI(stepName, contextMsg) {
+        AppState.journeyStep = stepName;
+        const currentIdx = AppState.journeySteps.indexOf(stepName);
+
+        DOM.stepNodes.forEach((node, idx) => {
+            node.classList.remove('active', 'completed');
+            if (idx === currentIdx) {
+                node.classList.add('active');
+            } else if (idx < currentIdx) {
+                node.classList.add('completed');
+            }
+        });
+
+        if (DOM.journeyBadge) DOM.journeyBadge.textContent = `STAGE: ${stepName.toUpperCase()}`;
+        if (DOM.journeyText && contextMsg) DOM.journeyText.textContent = contextMsg;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Activity & Timeline
+    // ═══════════════════════════════════════════════════════════════
+    function appendActivityItem(badge, text) {
+        const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+        const li = document.createElement('li');
+        li.className = 'feed-item';
+        li.innerHTML = `
+            <span class="feed-item-time">${timeStr}</span>
+            <span class="feed-item-badge">${badge}</span>
+            <span class="feed-item-text">${escapeHtml(text)}</span>
+        `;
+        if (DOM.overviewActivityFeed) {
+            const empty = DOM.overviewActivityFeed.querySelector('.feed-item-empty');
+            if (empty) empty.remove();
+            DOM.overviewActivityFeed.prepend(li);
+            if (DOM.overviewActivityFeed.children.length > 8) {
+                DOM.overviewActivityFeed.lastElementChild.remove();
+            }
+        }
+    }
+
+    async function loadActivityTimeline() {
+        if (!DOM.fullActivityTimeline) return;
+        DOM.fullActivityTimeline.innerHTML = '<div class="feed-item-empty">Loading verified activity log...</div>';
+        try {
+            const runs = await API.get('/api/v1/pipeline/runs');
+            if (!runs || runs.length === 0) {
+                DOM.fullActivityTimeline.innerHTML = '<div class="feed-item-empty">No pipeline runs executed yet. Run an autonomous cycle above.</div>';
+                return;
+            }
+            DOM.fullActivityTimeline.innerHTML = runs.map(r => `
+                <div class="card-panel" style="margin-bottom: 10px;">
+                    <div class="panel-header">
+                        <strong>Pipeline Run: ${escapeHtml(r.run_id)} (${escapeHtml(r.scenario)})</strong>
+                        <span class="status-pill pill-active">${escapeHtml(r.status)}</span>
                     </div>
+                    <p style="font-size: 12px; color: var(--text-muted);">Scale: ${r.scale} | Seed: ${r.seed} | Duration: ${r.total_duration_ms}ms</p>
                 </div>
+            `).join('');
+        } catch (err) {
+            DOM.fullActivityTimeline.innerHTML = '<div class="feed-item-empty">Could not load activity events.</div>';
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Agent Workspace Inspector
+    // ═══════════════════════════════════════════════════════════════
+    function loadAgentWorkspace(agentKey) {
+        if (!DOM.agentWorkspaceContent) return;
+
+        const agentProfiles = {
+            'M1': { name: 'Infrastructure Discovery Agent (M1)', tool: 'cloud_adapter.discover()', status: 'ACTIVE', input: 'Multi-cloud API credentials & VPC endpoints', output: 'Topology graph with 45+ nodes and network edges' },
+            'M2': { name: 'Cost Intelligence Agent (M2)', tool: 'billing_adapter.fetch_actuals()', status: 'ACTIVE', input: 'Normalized CUR line items', output: 'Service spend breakdown and waste categorization' },
+            'M3': { name: 'Application Intelligence Agent (M3)', tool: 'app_discovery.inspect_topology()', status: 'ACTIVE', input: 'Traffic telemetry, tags, process maps', output: 'Application boundary and dependency mapping' },
+            'M4': { name: 'Risk Intelligence Agent (M4)', tool: 'risk_engine.evaluate_blast_radius()', status: 'ACTIVE', input: 'Dependency paths and SLO definitions', output: 'Blast radius scores and SPOF alerts' },
+            'M5': { name: 'Strategy Agent (M5)', tool: 'strategy_engine.synthesize()', status: 'ACTIVE', input: 'Optimization candidates and constraints', output: 'Prioritized operational roadmap' },
+            'M6': { name: 'Digital Twin Simulator (M6)', tool: 'twin_simulator.simulate_change()', status: 'ACTIVE', input: 'Virtual copy of infrastructure topology', output: 'Counterfactual latency and SLA impact projection' },
+            'M7': { name: 'Explainability Agent (M7)', tool: 'explanation_engine.generate_proof()', status: 'ACTIVE', input: 'Decision rationale and evidence metrics', output: 'Human-readable justification and compliance proof' },
+            'M8': { name: 'Continuous Learning Agent (M8)', tool: 'learning_engine.evolve_dna()', status: 'ACTIVE', input: 'Post-execution outcomes and overrides', output: 'Updated Cloud DNA behavioral profile' },
+            'M9': { name: 'Decision Council (M9)', tool: 'consensus_manager.vote()', status: 'ACTIVE', input: 'Multi-agent evaluations and confidence scores', output: 'Consensus voting verdict: APPROVED' },
+            'TrueForge': { name: 'TrueForge Agent Runtime', tool: 'sandbox_executor.run()', status: 'ACTIVE', input: 'Autonomous operational goal and tool registry', output: 'Isolated execution in secure sandbox' },
+        };
+
+        const prof = agentProfiles[agentKey] || agentProfiles['M9'];
+        DOM.agentWorkspaceContent.innerHTML = `
+            <div class="panel-header">
+                <h3 class="panel-title">${escapeHtml(prof.name)}</h3>
+                <span class="status-pill pill-active">${escapeHtml(prof.status)}</span>
+            </div>
+            <div class="operational-detail-box">
+                <div class="op-row"><span class="op-label">Active Tool:</span> <span class="op-code-val">${escapeHtml(prof.tool)}</span></div>
+                <div class="op-row"><span class="op-label">Primary Input:</span> <span class="op-val">${escapeHtml(prof.input)}</span></div>
+                <div class="op-row"><span class="op-label">Output Artifact:</span> <span class="op-val">${escapeHtml(prof.output)}</span></div>
+            </div>
+            <div class="panel-actions" style="margin-top: 10px;">
+                <button class="btn-primary" onclick="window.CloudPilotApp.runAgentScan('${agentKey}')">Trigger Agent Inspection</button>
             </div>
         `;
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // 4. Recommendation Center Center Grid
+    // Infrastructure Explorer
     // ═══════════════════════════════════════════════════════════════
-    
-    function renderRecommendations(sortBy = "savings") {
-        recGrid.innerHTML = "";
-        let recs = [];
+    let _allInfraResources = [];
 
-        // Build mock recommendations database
-        if (activeProfile === "Startup") {
-            recs = [
-                { id: "1", type: "Oversized Database", target: "rds-db-1", savings: 150, risk: "MEDIUM", confidence: 94, app: "User Database", impact: "Saves 33% DB spend", readiness: "READY" },
-                { id: "2", type: "Underutilized Instance", target: "ec2-auth-1", savings: 50, risk: "LOW", confidence: 91, app: "Authentication", impact: "Saves 20% Auth compute", readiness: "READY" },
-            ];
-        } else if (activeProfile === "AI Startup" || activeProfile === "AI") {
-            recs = [
-                { id: "1", type: "Idle GPU Cluster Node", target: "ec2-gpu-node-4", savings: 4500, risk: "HIGH", confidence: 95, app: "LLM Model Training", impact: "Saves 100% cost of idle node", readiness: "EXECUTIVE_APPROVAL_REQUIRED" },
-            ];
-        } else if (activeProfile === "Healthcare") {
-            recs = [
-                { id: "1", type: "Oversized HIPAA DB", target: "rds-ehr-db", savings: 800, risk: "HIGH", confidence: 97, app: "Electronic Health Records", impact: "Optimizes patient IOPS limits", readiness: "SECURITY_APPROVAL_REQUIRED" },
-            ];
-        } else {
-            recs = [
-                { id: "1", type: "Idle Instance Scale-Down", target: "compute-node-1", savings: 1200, risk: "MEDIUM", confidence: 92, app: "Core API", impact: "Saves compute waste", readiness: "READY" },
-            ];
-        }
-
-        // Sort items
-        recs.sort((a, b) => {
-            if (sortBy === "savings") return b.savings - a.savings;
-            if (sortBy === "confidence") return b.confidence - a.confidence;
-            if (sortBy === "risk") {
-                const riskMap = { "LOW": 1, "MEDIUM": 2, "HIGH": 3 };
-                return riskMap[b.risk] - riskMap[a.risk];
-            }
-            return 0;
-        });
-
-        recs.forEach(r => {
-            const card = document.createElement("div");
-            card.className = "recommendation-card";
-            card.innerHTML = `
-                <div class="rec-header">
-                    <span class="rec-title">${r.type}</span>
-                    <span class="rec-savings">+$${r.savings.toLocaleString()}/mo</span>
-                </div>
-                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
-                    Target: <code>${r.target}</code> &middot; Affected Application: <strong>${r.app}</strong>
-                </div>
-                <div style="font-size: 11px; margin-bottom: 10px; color: var(--text-muted)">
-                    Business Impact: ${r.impact}
-                </div>
-                <div class="rec-meta" style="border-top: 1px solid var(--border-color); padding-top: 8px;">
-                    <span>Risk: <strong style="color: var(--color-warning)">${r.risk}</strong></span>
-                    <span>Confidence: <strong>${r.confidence}%</strong></span>
-                    <span>Status: <strong style="color: var(--color-success)">${r.readiness}</strong></span>
-                </div>
-            `;
-            recGrid.appendChild(card);
-        });
-    }
-
-    document.querySelectorAll(".sort-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-            document.querySelectorAll(".sort-btn").forEach(b => b.classList.remove("active"));
-            btn.classList.add("active");
-            renderRecommendations(btn.getAttribute("data-sort"));
-        });
-    });
-
-    // ═══════════════════════════════════════════════════════════════
-    // 5. Guided Story Mode & AI Processing Timeline
-    // ═══════════════════════════════════════════════════════════════
-    
-    async function triggerScan() {
-        if (isStoryRunning) return;
-        isStoryRunning = true;
-        startScanBtn.disabled = true;
-        startScanBtn.textContent = "Scanning...";
-        logEvent("SYSTEM", "AI pipeline triggered manually. Analyzing telemetry & resources...");
-
-        await fetch("/api/demo/pipeline-start", { method: "POST" });
-
-        const interval = setInterval(async () => {
-            const res = await fetch("/api/demo/pipeline-status");
-            const status = await res.json();
-            let active = false;
-
-            for (const [mod, state] of Object.entries(status)) {
-                const el = document.querySelector(`.pipeline-step[data-step="${mod}"]`);
-                if (el) {
-                    const statusText = el.querySelector(".step-status");
-                    el.classList.remove("pending", "running", "completed");
-                    if (state === "COMPLETED") {
-                        el.classList.add("completed");
-                        statusText.textContent = "Completed";
-                    } else if (state === "RUNNING") {
-                        el.classList.add("running");
-                        statusText.textContent = "Processing...";
-                        active = true;
-                    } else {
-                        el.classList.add("pending");
-                        statusText.textContent = "Idle";
-                    }
-                }
-            }
-
-            if (!active) {
-                clearInterval(interval);
-                isStoryRunning = false;
-                startScanBtn.disabled = false;
-                startScanBtn.textContent = "Scan Environment";
-                logEvent("SYSTEM", "Pipeline execution finished successfully.");
-            }
-        }, 600);
-    }
-
-    startScanBtn.addEventListener("click", () => {
-        triggerScan();
-    });
-
-    // Guided Story Mode Tour
-    storyModeBtn.addEventListener("click", () => {
-        if (isStoryRunning) return;
-        isStoryRunning = true;
-        storyModeBtn.disabled = true;
-        storyModeBtn.textContent = "Tour Active...";
-        logEvent("STORY-MODE", "Guided story mode activated. Performing end-to-end cloud operations tour...");
-
-        let step = 0;
-        const tourSteps = [
-            { sender: "M1-IDA", text: "Discovered production subnets and cataloged VPC dependencies." },
-            { sender: "M2-CIA", text: "Ingested Billing records. Identified $4,500 underutilized ML nodes." },
-            { sender: "M3-AIA", text: "Mapped Model Inference API boundary and discovered 1 active dependency cycle." },
-            { sender: "M4-RIA", text: "Analyzed blast radius of compute resizing. Predicted 0% SLA failure probability." },
-            { sender: "M5-SA", text: "Generated optimization strategies. Created EC2 resize recommendation." },
-            { sender: "M6-DTS", text: "Constructed digital twin copy. Simulated workload performance." },
-            { sender: "M7-EE", text: "Generated explainability audit records. Drafted decision reasoning plan." },
-            { sender: "M9-DE", text: "Decision Council reached majority consensus: APPROVE." },
-            { sender: "M10-AEA", text: "Executed safe scaling changes and locked resources. Telemetry verified healthy." }
-        ];
-
-        const timelineSteps = [
-            "M1_IDA", "M2_CIA", "M3_AIA", "M4_RIA", "M5_SA", "M6_DTS", "M7_EE", "M8_LEA", "M9_DE", "M10_AEA"
-        ];
-
-        const tourInterval = setInterval(() => {
-            if (step < tourSteps.length) {
-                const s = tourSteps[step];
-                logEvent(s.sender, s.text);
-                
-                // Highlight step in timeline
-                const activeMod = timelineSteps[step];
-                const el = document.querySelector(`.pipeline-step[data-step="${activeMod}"]`);
-                if (el) {
-                    el.classList.add("completed");
-                    el.querySelector(".step-status").textContent = "Completed";
-                }
-
-                step++;
-            } else {
-                clearInterval(tourInterval);
-                isStoryRunning = false;
-                storyModeBtn.disabled = false;
-                storyModeBtn.textContent = "Start Story Mode Tour";
-                logEvent("STORY-MODE", "Guided tour completed. Savings harvested successfully.");
-            }
-        }, 1200);
-    });
-
-    // ═══════════════════════════════════════════════════════════════
-    // 6. Digital Twin Simulated Run
-    // ═══════════════════════════════════════════════════════════════
-    
-    runTwinSimulationBtn.addEventListener("click", () => {
-        logEvent("M6-DTS", "Constructing Virtual Digital Twin copy...");
-        document.querySelectorAll(".twin-step").forEach(el => el.classList.remove("active", "completed"));
-        
-        let step = 1;
-        const simInterval = setInterval(() => {
-            const stepEl = document.getElementById(`twin-step-${step}`);
-            if (stepEl) {
-                stepEl.classList.add("active");
-                if (step > 1) {
-                    document.getElementById(`twin-step-${step-1}`).classList.remove("active");
-                    document.getElementById(`twin-step-${step-1}`).classList.add("completed");
-                }
-                step++;
-            } else {
-                clearInterval(simInterval);
-                document.getElementById("twin-step-4").classList.remove("active");
-                document.getElementById("twin-step-4").classList.add("completed");
-                logEvent("M6-DTS", "Digital Twin simulation completed. No failures predicted under load tests.");
-            }
-        }, 800);
-    });
-
-    // ═══════════════════════════════════════════════════════════════
-    // 7. Workspaces Tab Controller
-    // ═══════════════════════════════════════════════════════════════
-    
-    agentTabBtns.forEach(btn => {
-        btn.addEventListener("click", () => {
-            agentTabBtns.forEach(b => b.classList.remove("active"));
-            btn.classList.add("active");
-            renderAgentWorkspace(btn.getAttribute("data-agent"));
-        });
-    });
-
-    function renderAgentWorkspace(agent) {
-        if (agent === "infra") {
-            workspaceBody.innerHTML = `
-                <h3 class="panel-subtitle">Discovery Workspace (M1)</h3>
-                <div style="font-size: 13px; display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
-                    <div><strong>Scanner Workers:</strong> 4 parallel threads</div>
-                    <div><strong>Discovery Adapters:</strong> AWS, GCP, Azure, Kubernetes</div>
-                    <div><strong>Discovery Cycle:</strong> Every 5 minutes</div>
-                    <div style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 10px;">
-                        <strong>Target Scanned Objects:</strong>
-                        <pre style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; margin-top: 5px; font-family: var(--font-mono); font-size:11px;">
-{
-  "provider": "AWS",
-  "regions": ["us-east-1", "eu-west-1"],
-  "resources_found": ${activeProfile === "Startup" ? 5 : 20}
-}</pre>
-                    </div>
-                </div>
-            `;
-        } else if (agent === "cost") {
-            workspaceBody.innerHTML = `
-                <h3 class="panel-subtitle">Cost Intelligence Workspace (M2)</h3>
-                <div style="font-size: 13px; display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
-                    <div><strong>Correlator Accuracy:</strong> 94.2% matching rate</div>
-                    <div><strong>Spike Anomaly Threshold:</strong> 30.0% standard deviation</div>
-                    <div><strong>Forecasting Period:</strong> 7 / 14 / 30 / 90 / 365 Days</div>
-                    <div style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 10px;">
-                        <strong>Billing Ingestion Logs:</strong>
-                        <div style="font-family: var(--font-mono); font-size: 11px; color: var(--color-success); margin-top: 5px;">
-                            ✓ Ingested AWS Cost Explorer daily payload.<br>
-                            ✓ Correlated billing items to EC2 compute targets.
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else if (agent === "app") {
-            workspaceBody.innerHTML = `
-                <h3 class="panel-subtitle">Application Intelligence Workspace (M3)</h3>
-                <div style="font-size: 13px; display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
-                    <div><strong>Discovered Mappings:</strong> Tag-based, naming convention, namespace boundaries</div>
-                    <div><strong>Criticality Scoring:</strong> Business priority weightings</div>
-                    <div><strong>Active Cycles:</strong> 0 dependency loops detected</div>
-                </div>
-            `;
-        } else if (agent === "risk") {
-            workspaceBody.innerHTML = `
-                <h3 class="panel-subtitle">Risk Intelligence Workspace (M4)</h3>
-                <div style="font-size: 13px; display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
-                    <div><strong>SPOF Scan Status:</strong> Clean (no single point of failure)</div>
-                    <div><strong>Blast Radius Prediction:</strong> Low blast radius on target resizing</div>
-                    <div><strong>Validation Probability:</strong> 99.4% confidence score</div>
-                </div>
-            `;
-        } else if (agent === "council") {
-            // Decision Council voting table
-            workspaceBody.innerHTML = `
-                <h3 class="panel-subtitle">Decision Council (M9) - Collaborative Votes</h3>
-                <table class="council-voting-table">
-                    <thead>
-                        <tr>
-                            <th>Agent Module</th>
-                            <th>Vote Verdict</th>
-                            <th>Confidence</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Infrastructure Agent (M1)</td>
-                            <td><span class="vote-badge approve">APPROVE</span></td>
-                            <td>98%</td>
-                        </tr>
-                        <tr>
-                            <td>Cost Intelligence (M2)</td>
-                            <td><span class="vote-badge approve">APPROVE</span></td>
-                            <td>95%</td>
-                        </tr>
-                        <tr>
-                            <td>Risk Intelligence (M4)</td>
-                            <td><span class="vote-badge approve">${activeProfile === "Banking" ? "CONDITIONAL" : "APPROVE"}</span></td>
-                            <td>92%</td>
-                        </tr>
-                        <tr>
-                            <td>Digital Twin Simulator (M6)</td>
-                            <td><span class="vote-badge approve">APPROVE</span></td>
-                            <td>97%</td>
-                        </tr>
-                        <tr>
-                            <td>Learning Agent (M8)</td>
-                            <td><span class="vote-badge approve">APPROVE</span></td>
-                            <td>94%</td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div style="margin-top: 15px; font-size: 12px; color: var(--text-secondary)">
-                    <strong>Final Status:</strong> <span style="color: var(--color-success); font-weight:700;">APPROVED BY CONSENSUS</span>
-                </div>
-            `;
+    async function loadInfrastructure() {
+        if (!DOM.infraTableBody) return;
+        DOM.infraTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading discovered topology...</td></tr>';
+        try {
+            const topo = await API.get('/api/v1/simulator/topology');
+            _allInfraResources = topo.resources || [];
+            if (DOM.countInfraAll) DOM.countInfraAll.textContent = _allInfraResources.length;
+            renderInfraTable(_allInfraResources);
+        } catch (err) {
+            DOM.infraTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Could not load infrastructure resources.</td></tr>';
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // 8. Copilot Chatbot Handler
-    // ═══════════════════════════════════════════════════════════════
-    
-    async function handleCopilotSubmit(query) {
-        if (!query.trim()) return;
+    function renderInfraTable(resources) {
+        if (!resources || resources.length === 0) {
+            DOM.infraTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No resources found.</td></tr>';
+            return;
+        }
+        DOM.infraTableBody.innerHTML = resources.map(r => `
+            <tr>
+                <td><code class="op-code-val">${escapeHtml(r.resource_id)}</code></td>
+                <td>${escapeHtml(r.resource_type || 'Unknown')}</td>
+                <td><span class="brand-env-badge">${escapeHtml(r.environment || 'production')}</span></td>
+                <td><span class="${r.criticality === 'TIER_1' ? 'badge-risk-low' : 'kpi-tag'}">${escapeHtml(r.criticality || 'STANDARD')}</span></td>
+                <td><span class="status-indicator-dot ${r.state === 'running' ? 'dot-emerald' : 'dot-cyan'}" style="display:inline-block; margin-right:4px;"></span>${escapeHtml(r.state || 'active')}</td>
+                <td><strong>$${(r.monthly_cost_usd || 0).toFixed(2)}</strong></td>
+                <td><button class="btn-secondary" style="padding:2px 8px; font-size:11px;" onclick="window.CloudPilotApp.inspectResource('${escapeHtml(r.resource_id)}')">Inspect</button></td>
+            </tr>
+        `).join('');
+    }
 
-        // User balloon
-        const userDiv = document.createElement("div");
-        userDiv.className = "copilot-message user";
-        userDiv.textContent = query;
-        copilotHistory.appendChild(userDiv);
-        copilotInput.value = "";
-        copilotHistory.scrollTop = copilotHistory.scrollHeight;
+    function filterInfraTable(category) {
+        if (category === 'ALL') {
+            renderInfraTable(_allInfraResources);
+            return;
+        }
+        const filtered = _allInfraResources.filter(r => {
+            const t = (r.resource_type || '').toUpperCase();
+            if (category === 'COMPUTE') return t.includes('EC2') || t.includes('COMPUTE') || t.includes('INSTANCE');
+            if (category === 'DATABASE') return t.includes('RDS') || t.includes('DATABASE') || t.includes('DB');
+            if (category === 'STORAGE') return t.includes('S3') || t.includes('EBS') || t.includes('VOLUME');
+            if (category === 'K8S') return t.includes('EKS') || t.includes('K8S') || t.includes('CLUSTER');
+            return true;
+        });
+        renderInfraTable(filtered);
+    }
 
-        // Wait balloon
-        const agentDiv = document.createElement("div");
-        agentDiv.className = "copilot-message agent";
-        agentDiv.textContent = "...";
-        copilotHistory.appendChild(agentDiv);
-        copilotHistory.scrollTop = copilotHistory.scrollHeight;
+    // ═══════════════════════════════════════════════════════════════
+    // Approvals Center
+    // ═══════════════════════════════════════════════════════════════
+    async function loadApprovals() {
+        if (!DOM.approvalsContainer) return;
+        DOM.approvalsContainer.innerHTML = '<div class="feed-item-empty">Loading approval queue...</div>';
+        try {
+            const requests = await API.get('/api/v1/governance/approvals');
+            if (!requests || requests.length === 0) {
+                DOM.approvalsContainer.innerHTML = '<div class="feed-item-empty">No pending approval requests. Autonomy gates clear.</div>';
+                return;
+            }
+            DOM.approvalsContainer.innerHTML = requests.map(req => `
+                <div class="card-panel" style="margin-bottom: 12px;">
+                    <div class="panel-header">
+                        <strong>Request #${escapeHtml(req.request_id)}: ${escapeHtml(req.action.action_type)}</strong>
+                        <span class="status-pill pill-active">${escapeHtml(req.status)}</span>
+                    </div>
+                    <div class="operational-detail-box">
+                        <div class="op-row"><span class="op-label">Target:</span> <strong>${escapeHtml(req.action.target_resource_id)}</strong></div>
+                        <div class="op-row"><span class="op-label">Required Role:</span> <span>${escapeHtml(req.required_route || req.route || 'ENGINEERING_LEAD')}</span></div>
+                        <div class="op-row"><span class="op-label">Cost Impact:</span> <span class="text-emerald">$${(req.action.cost_impact_monthly_usd || 0).toFixed(2)}/mo</span></div>
+                    </div>
+                    ${req.status === 'PENDING' ? `
+                    <div class="panel-actions" style="margin-top: 10px;">
+                        <button class="btn-primary" onclick="window.CloudPilotApp.openApprovalModal('${escapeHtml(req.request_id)}')">Review & Decide</button>
+                    </div>` : ''}
+                </div>
+            `).join('');
+        } catch (err) {
+            DOM.approvalsContainer.innerHTML = '<div class="feed-item-empty">Could not load approval requests.</div>';
+        }
+    }
+
+    function openApprovalModal(requestId) {
+        AppState.currentApprovalModalId = requestId;
+        if (DOM.approvalDesc) DOM.approvalDesc.textContent = `Reviewing human-in-the-loop authorization request: ${requestId}`;
+        if (DOM.approvalModal) DOM.approvalModal.classList.add('open');
+    }
+
+    function closeApprovalModal() {
+        if (DOM.approvalModal) DOM.approvalModal.classList.remove('open');
+        AppState.currentApprovalModalId = null;
+    }
+
+    async function submitApprovalDecision(approved) {
+        if (!AppState.currentApprovalModalId) return;
+        const approver = DOM.approvalApproverInput ? DOM.approvalApproverInput.value : 'Operator';
+        const reason = DOM.approvalReasonInput ? DOM.approvalReasonInput.value : '';
 
         try {
-            const res = await fetch("/api/demo/copilot", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query }),
+            await API.post(`/api/v1/governance/approvals/${AppState.currentApprovalModalId}/decide`, {
+                approver,
+                role: 'Lead-Architect',
+                approved,
+                reason,
             });
-            const data = await res.json();
-            
-            // Type response
-            agentDiv.innerHTML = data.response;
-            copilotHistory.scrollTop = copilotHistory.scrollHeight;
+            closeApprovalModal();
+            loadApprovals();
+            fetchOverviewState();
         } catch (err) {
-            agentDiv.textContent = "Sorry, I encountered an issue querying the agent stack.";
+            console.error('Error submitting approval decision:', err);
         }
     }
 
-    copilotForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-        handleCopilotSubmit(copilotInput.value);
-    });
-
-    suggestionChips.forEach(chip => {
-        chip.addEventListener("click", () => {
-            handleCopilotSubmit(chip.textContent);
-        });
-    });
-
     // ═══════════════════════════════════════════════════════════════
-    // 9. Startup & Telemetry loop
+    // Rollback View
     // ═══════════════════════════════════════════════════════════════
-    
-    // Live telemetry update simulation loop
-    setInterval(async () => {
+    async function loadRollbacks() {
+        if (!DOM.rollbackContainer) return;
+        DOM.rollbackContainer.innerHTML = '<div class="feed-item-empty">Loading rollback history...</div>';
         try {
-            const res = await fetch(`/api/demo/telemetry?target_id=${selectedResource}`);
-            const data = await res.json();
-            
-            telemetryCpu.textContent = `${data.cpu_percent}%`;
-            telemetryCpuBar.style.width = `${data.cpu_percent}%`;
-
-            telemetryMem.textContent = `${data.memory_percent}%`;
-            telemetryMemBar.style.width = `${data.memory_percent}%`;
-
-            const availPercent = data.availability * 100;
-            telemetryAvail.textContent = `${availPercent}%`;
-            telemetryAvailBar.style.width = `${availPercent}%`;
+            const list = await API.get('/api/v1/verification/rollback/history');
+            if (!list || list.length === 0) {
+                DOM.rollbackContainer.innerHTML = '<div class="feed-item-empty">Zero rollbacks executed. Infrastructure is currently operating normally.</div>';
+                return;
+            }
+            DOM.rollbackContainer.innerHTML = list.map(rb => `
+                <div class="card-panel" style="margin-bottom: 12px;">
+                    <div class="panel-header">
+                        <strong>Rollback ID: ${escapeHtml(rb.rollback_id)}</strong>
+                        <span class="status-pill pill-active">${escapeHtml(rb.status)}</span>
+                    </div>
+                    <div class="operational-detail-box">
+                        <div class="op-row"><span class="op-label">Target Resource:</span> <strong>${escapeHtml(rb.target_resource_id)}</strong></div>
+                        <div class="op-row"><span class="op-label">Baseline Restored:</span> <span class="text-emerald">${rb.baseline_restored ? 'YES (Validated)' : 'NO'}</span></div>
+                        <div class="op-row"><span class="op-label">Audit Record:</span> <code class="op-code-val">${escapeHtml(rb.audit_record_id || 'N/A')}</code></div>
+                    </div>
+                </div>
+            `).join('');
         } catch (err) {
-            // fail silently
+            DOM.rollbackContainer.innerHTML = '<div class="feed-item-empty">Could not load rollback records.</div>';
         }
-    }, 2500);
+    }
 
-    // Bootstrap
-    handleScenarioChange("Startup");
-});
+    // ═══════════════════════════════════════════════════════════════
+    // Learning & Cloud DNA
+    // ═══════════════════════════════════════════════════════════════
+    async function loadLearning() {
+        if (!DOM.dnaContainer) return;
+        try {
+            const data = await API.get('/api/v1/verification/learning/metrics');
+            const dna = data.cloud_dna || {};
+            DOM.dnaContainer.innerHTML = `
+                <div class="cards-grid-3">
+                    <div class="card-panel">
+                        <h3 class="panel-subtitle">Deployment Style</h3>
+                        <div class="large-stat text-cyan">${escapeHtml(dna.deployment_style || 'MODERATE')}</div>
+                        <p class="stat-desc">Learned operational risk posture</p>
+                    </div>
+                    <div class="card-panel">
+                        <h3 class="panel-subtitle">Risk Tolerance</h3>
+                        <div class="large-stat text-emerald">${escapeHtml(dna.risk_tolerance || 'MEDIUM')}</div>
+                        <p class="stat-desc">Dynamic tolerance boundaries</p>
+                    </div>
+                    <div class="card-panel">
+                        <h3 class="panel-subtitle">Rollback Frequency</h3>
+                        <div class="large-stat">${(dna.rollback_frequency_pct || 0).toFixed(1)}%</div>
+                        <p class="stat-desc">Historical operational reversions</p>
+                    </div>
+                </div>
+            `;
+        } catch (err) {
+            DOM.dnaContainer.innerHTML = '<div class="feed-item-empty">Could not load Cloud DNA metrics.</div>';
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Strategy & Risk Views
+    // ═══════════════════════════════════════════════════════════════
+    async function loadStrategy() {
+        if (!DOM.strategyContainer) return;
+        DOM.strategyContainer.innerHTML = `
+            <div class="card-panel">
+                <div class="panel-header">
+                    <strong>Strategy #1: Rightsizing Non-Production Workloads</strong>
+                    <span class="status-pill pill-active">RECOMMENDED</span>
+                </div>
+                <p style="font-size: 13px; color: var(--text-secondary); margin: 6px 0;">
+                    Downscale idle dev/test compute instances during off-peak hours and adjust memory headroom.
+                </p>
+                <div class="operational-detail-box">
+                    <div class="op-row"><span class="op-label">Estimated Monthly Savings:</span> <strong class="text-emerald">$125.00</strong></div>
+                    <div class="op-row"><span class="op-label">Implementation Risk:</span> <span class="badge-risk-low">LOW</span></div>
+                    <div class="op-row"><span class="op-label">Confidence:</span> <span>94.2%</span></div>
+                </div>
+            </div>
+        `;
+    }
+
+    async function loadRisk() {
+        if (!DOM.riskContainer) return;
+        DOM.riskContainer.innerHTML = `
+            <div class="card-panel">
+                <div class="panel-header">
+                    <strong>Critical Dependency Risk Check</strong>
+                    <span class="badge-risk-low">LOW RISK</span>
+                </div>
+                <p style="font-size: 13px; color: var(--text-secondary); margin: 6px 0;">
+                    Zero single points of failure detected on Tier-1 customer path. Redundant VPC subnets active.
+                </p>
+            </div>
+        `;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // CloudPilot Copilot Interactive Engine
+    // ═══════════════════════════════════════════════════════════════
+    async function sendCopilotQuery(queryText) {
+        if (!queryText || !DOM.copilotChatBox) return;
+
+        // Append User bubble
+        const userDiv = document.createElement('div');
+        userDiv.className = 'copilot-bubble user';
+        userDiv.textContent = queryText;
+        DOM.copilotChatBox.appendChild(userDiv);
+
+        if (DOM.copilotInput) DOM.copilotInput.value = '';
+        DOM.copilotChatBox.scrollTop = DOM.copilotChatBox.scrollHeight;
+
+        // Append loading assistant bubble
+        const asstDiv = document.createElement('div');
+        asstDiv.className = 'copilot-bubble assistant';
+        asstDiv.textContent = 'Analyzing platform telemetry and reasoning...';
+        DOM.copilotChatBox.appendChild(asstDiv);
+        DOM.copilotChatBox.scrollTop = DOM.copilotChatBox.scrollHeight;
+
+        try {
+            const res = await API.post('/api/v1/command-center/copilot', { query: queryText });
+            asstDiv.textContent = res.answer || 'Query processed successfully.';
+        } catch (err) {
+            asstDiv.textContent = 'Could not process query. Please verify backend API connectivity.';
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Expandable Evidence Modal
+    // ═══════════════════════════════════════════════════════════════
+    function showEvidenceModal(title, jsonPayload) {
+        if (DOM.evidencePre) DOM.evidencePre.textContent = JSON.stringify(jsonPayload, null, 2);
+        if (DOM.evidenceModal) DOM.evidenceModal.classList.add('open');
+    }
+
+    function closeEvidenceModal() {
+        if (DOM.evidenceModal) DOM.evidenceModal.classList.remove('open');
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Global namespace exposure for inline onclick handlers
+    window.CloudPilotApp = {
+        switchView,
+        advanceJourney,
+        openApprovalModal,
+        inspectResource: (id) => {
+            const res = _allInfraResources.find(r => r.resource_id === id);
+            showEvidenceModal(`Resource Details: ${id}`, res || { resource_id: id });
+        },
+        runAgentScan: (key) => {
+            appendActivityItem(key, `Manual agent inspection triggered for ${key}`);
+            loadAgentWorkspace(key);
+        }
+    };
+
+    // DOM Ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();

@@ -3,355 +3,710 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CloudPilot AI - Command Center OS</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="description" content="CloudPilot AI Enterprise Command Center - Autonomous Cloud Reasoning, Verification, and Safety Control Plane">
+    <title>CloudPilot AI — Enterprise Command Center</title>
+    <!-- Modern typography: Inter and Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="dark-theme">
-    <div class="app-container">
-        <!-- Sidebar Navigation -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="logo">
-                    <span class="logo-text">CloudPilot</span>
-                    <span class="logo-badge">OS</span>
+<body class="command-center-app">
+
+    <!-- Top Master Header Bar -->
+    <header class="master-header" role="banner">
+        <div class="header-left">
+            <div class="brand">
+                <div class="brand-logo">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                        <polyline points="2 17 12 22 22 17"></polyline>
+                        <polyline points="2 12 12 17 22 12"></polyline>
+                    </svg>
+                </div>
+                <div class="brand-info">
+                    <span class="brand-name">CloudPilot AI</span>
+                    <span class="brand-env-badge" id="header-scenario-badge">SaaS Enterprise</span>
                 </div>
             </div>
-            
-            <!-- Main OS Tabs -->
-            <nav class="sidebar-nav">
-                <a href="#" class="nav-item active" data-tab="dashboard">Dashboard</a>
-                <a href="#" class="nav-item" data-tab="graph">Topology Graph</a>
-                <a href="#" class="nav-item" data-tab="workspaces">Agent Workspaces</a>
-                <a href="#" class="nav-item" data-tab="recommendations">Optimization Center</a>
-                <a href="#" class="nav-item" data-tab="copilot">AI Copilot</a>
-                <a href="#" class="nav-item" data-tab="learning">Memory & Learning</a>
-                <div class="nav-divider"></div>
-                <button id="theme-toggle" class="btn btn-secondary theme-toggle-btn">Toggle Light Mode</button>
-            </nav>
-            
-            <div class="profile-summary">
-                <div class="avatar">C</div>
-                <div class="profile-info">
-                    <div class="profile-name">Operator Console</div>
-                    <div class="profile-role">Autonomous Controller</div>
-                </div>
+
+            <!-- Scenario Selector -->
+            <div class="scenario-selector-group">
+                <label for="scenario-dropdown" class="sr-only">Enterprise Scenario</label>
+                <select id="scenario-dropdown" class="scenario-select" title="Switch Digital Enterprise Scenario">
+                    <option value="SaaS" selected>Scenario: SaaS Multi-Tenant</option>
+                    <option value="Banking">Scenario: Banking Core</option>
+                    <option value="Ecommerce">Scenario: Global E-Commerce</option>
+                    <option value="AI Research">Scenario: AI Research Lab</option>
+                    <option value="Startup">Scenario: High-Growth Startup</option>
+                    <option value="Healthcare">Scenario: Healthcare HIPAA</option>
+                    <option value="Gaming">Scenario: Multiplayer Gaming</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <!-- Autonomy Level Status -->
+            <div class="header-status-item" id="autonomy-status-badge" title="Current Autonomy Level">
+                <span class="status-indicator-dot dot-cyan"></span>
+                <span class="status-label">Autonomy:</span>
+                <span class="status-val" id="header-autonomy-val">L4 Limited</span>
+            </div>
+
+            <!-- Live SSE Stream Indicator -->
+            <div class="header-status-item" id="sse-status-badge" title="Real-Time Event Stream">
+                <span class="status-indicator-dot dot-emerald" id="sse-dot"></span>
+                <span class="status-label">Live Stream</span>
+            </div>
+
+            <!-- Emergency Stop (Kill Switch) -->
+            <button id="emergency-stop-btn" class="btn-emergency-stop" title="Trigger Instant Emergency Stop for all operations">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+                <span id="emergency-btn-text">Emergency Stop</span>
+            </button>
+
+            <!-- Copilot Toggle -->
+            <button id="copilot-toggle-btn" class="btn-copilot-trigger" title="Open CloudPilot AI Copilot">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span>Copilot</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Primary User Journey Stepper: Goal -> Analyze -> Plan -> Simulate -> Approval -> Execute -> Monitor -> Verify -->
+    <section class="journey-stepper-bar" aria-label="Primary Autonomous Operations Journey">
+        <div class="journey-header">
+            <span class="journey-title">AUTONOMOUS OPERATIONS JOURNEY</span>
+            <div class="journey-controls">
+                <button id="journey-run-next-btn" class="btn-journey-action">Advance Next Step</button>
+                <button id="journey-run-all-btn" class="btn-journey-auto">Run Full Autonomous Cycle</button>
+            </div>
+        </div>
+
+        <nav class="stepper-track" aria-label="Journey Stages">
+            <button class="step-node active" data-step="Goal" id="step-node-goal">
+                <span class="step-num">1</span>
+                <span class="step-text">Goal</span>
+            </button>
+            <div class="step-arrow">→</div>
+            <button class="step-node" data-step="Analyze" id="step-node-analyze">
+                <span class="step-num">2</span>
+                <span class="step-text">Analyze</span>
+            </button>
+            <div class="step-arrow">→</div>
+            <button class="step-node" data-step="Plan" id="step-node-plan">
+                <span class="step-num">3</span>
+                <span class="step-text">Plan</span>
+            </button>
+            <div class="step-arrow">→</div>
+            <button class="step-node" data-step="Simulate" id="step-node-simulate">
+                <span class="step-num">4</span>
+                <span class="step-text">Simulate</span>
+            </button>
+            <div class="step-arrow">→</div>
+            <button class="step-node" data-step="Approval" id="step-node-approval">
+                <span class="step-num">5</span>
+                <span class="step-text">Approval</span>
+            </button>
+            <div class="step-arrow">→</div>
+            <button class="step-node" data-step="Execute" id="step-node-execute">
+                <span class="step-num">6</span>
+                <span class="step-text">Execute</span>
+            </button>
+            <div class="step-arrow">→</div>
+            <button class="step-node" data-step="Monitor" id="step-node-monitor">
+                <span class="step-num">7</span>
+                <span class="step-text">Monitor</span>
+            </button>
+            <div class="step-arrow">→</div>
+            <button class="step-node" data-step="Verify" id="step-node-verify">
+                <span class="step-num">8</span>
+                <span class="step-text">Verify</span>
+            </button>
+        </nav>
+
+        <!-- Current Step Context Summary -->
+        <div class="journey-context-banner" id="journey-context-banner">
+            <span class="context-pill" id="journey-current-badge">STAGE: GOAL</span>
+            <span class="context-desc" id="journey-context-text">Objective: Reduce non-critical cloud infrastructure spend by 20% while maintaining 99.99% availability.</span>
+        </div>
+    </section>
+
+    <!-- Main Workspace Container -->
+    <div class="main-layout">
+        
+        <!-- Navigation Sidebar with 15 Views -->
+        <aside class="main-sidebar" role="navigation">
+            <div class="sidebar-scroll-wrapper">
+
+                <div class="nav-section-label">OPERATIONAL COCKPIT</div>
+                <button class="nav-btn active" data-view="overview" id="nav-overview">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-title">Overview Dashboard</span>
+                </button>
+                <button class="nav-btn" data-view="activity" id="nav-activity">
+                    <span class="nav-icon">⏱️</span>
+                    <span class="nav-title">Activity Timeline</span>
+                </button>
+                <button class="nav-btn" data-view="agent-workspace" id="nav-agent-workspace">
+                    <span class="nav-icon">🧠</span>
+                    <span class="nav-title">Agent Workspace</span>
+                </button>
+
+                <div class="nav-section-label">INTELLIGENCE & TOPOLOGY</div>
+                <button class="nav-btn" data-view="infrastructure" id="nav-infrastructure">
+                    <span class="nav-icon">🌐</span>
+                    <span class="nav-title">Infrastructure Explorer</span>
+                </button>
+                <button class="nav-btn" data-view="cost" id="nav-cost">
+                    <span class="nav-icon">💰</span>
+                    <span class="nav-title">Cost Intelligence</span>
+                </button>
+                <button class="nav-btn" data-view="risk" id="nav-risk">
+                    <span class="nav-icon">🛡️</span>
+                    <span class="nav-title">Risk Explorer</span>
+                </button>
+                <button class="nav-btn" data-view="strategy" id="nav-strategy">
+                    <span class="nav-icon">📋</span>
+                    <span class="nav-title">Strategy Workspace</span>
+                </button>
+                <button class="nav-btn" data-view="digital-twin" id="nav-digital-twin">
+                    <span class="nav-icon">🧪</span>
+                    <span class="nav-title">Digital Twin</span>
+                </button>
+
+                <div class="nav-section-label">GOVERNANCE & EXECUTION</div>
+                <button class="nav-btn" data-view="decision-council" id="nav-decision-council">
+                    <span class="nav-icon">⚖️</span>
+                    <span class="nav-title">Decision Council</span>
+                </button>
+                <button class="nav-btn" data-view="approvals" id="nav-approvals">
+                    <span class="nav-icon">✋</span>
+                    <span class="nav-title">Approval Center</span>
+                    <span class="nav-badge badge-amber" id="nav-pending-approvals-badge">0</span>
+                </button>
+                <button class="nav-btn" data-view="execution" id="nav-execution">
+                    <span class="nav-icon">⚡</span>
+                    <span class="nav-title">Execution Console</span>
+                </button>
+                <button class="nav-btn" data-view="rollback" id="nav-rollback">
+                    <span class="nav-icon">🔄</span>
+                    <span class="nav-title">Rollback View</span>
+                </button>
+
+                <div class="nav-section-label">ATTRIBUTION & LEARNING</div>
+                <button class="nav-btn" data-view="learning" id="nav-learning">
+                    <span class="nav-icon">🧬</span>
+                    <span class="nav-title">Learning Timeline</span>
+                </button>
+                <button class="nav-btn" data-view="attribution" id="nav-attribution">
+                    <span class="nav-icon">📈</span>
+                    <span class="nav-title">Savings Attribution</span>
+                </button>
+                <button class="nav-btn" data-view="copilot-view" id="nav-copilot-view">
+                    <span class="nav-icon">💬</span>
+                    <span class="nav-title">CloudPilot Copilot</span>
+                </button>
+
             </div>
         </aside>
 
-        <!-- Main Workspace Area -->
-        <main class="workspace">
-            <!-- Top Header Bar -->
-            <header class="top-bar">
-                <div class="top-left">
-                    <div class="scenario-selector-container">
-                        <label for="enterprise-select">Cloud Scenario</label>
-                        <select id="enterprise-select" class="dropdown">
-                            <!-- Scenario Library (10 profiles) -->
-                            <option value="Startup">Startup Company</option>
-                            <option value="Healthcare">Healthcare Provider</option>
-                            <option value="Manufacturing">Manufacturing IoT</option>
-                            <option value="Gaming">Multiplayer Game Studio</option>
-                            <option value="AI Startup">AI Research Lab</option>
-                            <option value="SaaS">SaaS Platform Group</option>
-                            <option value="Financial Services">Financial Group</option>
-                            <option value="Government">Civic Administration</option>
-                            <option value="Media">VOD Streaming Network</option>
-                            <option value="Retail">Global E-commerce</option>
-                        </select>
+        <!-- Dynamic Main Content Viewport -->
+        <main class="content-viewport" role="main">
+
+            <!-- 1. OVERVIEW DASHBOARD -->
+            <section class="view-panel active" id="view-overview" aria-labelledby="heading-overview">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-overview">Command Center Overview</h1>
+                        <p class="view-subtitle">Real-time status of autonomous cloud operations, spend, risks, and governance.</p>
+                    </div>
+                    <button class="btn-refresh" id="refresh-overview-btn" title="Refresh Live State">↻ Refresh</button>
+                </div>
+
+                <!-- Calm Executive KPI Grid -->
+                <div class="kpi-cards-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-top">
+                            <span class="kpi-name">Monitored Spend</span>
+                            <span class="kpi-tag">Monthly</span>
+                        </div>
+                        <div class="kpi-value" id="kpi-monthly-spend">$0.00</div>
+                        <div class="kpi-footer" id="kpi-resources-count">0 resources monitored</div>
+                    </div>
+                    <div class="kpi-card highlight-green">
+                        <div class="kpi-top">
+                            <span class="kpi-name">Verified Realized Savings</span>
+                            <span class="kpi-tag tag-green">Ex-Post</span>
+                        </div>
+                        <div class="kpi-value text-emerald" id="kpi-verified-savings">$0.00</div>
+                        <div class="kpi-footer" id="kpi-annualized-savings">$0.00/yr annualized</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-top">
+                            <span class="kpi-name">Potential Savings</span>
+                            <span class="kpi-tag">Waste Target</span>
+                        </div>
+                        <div class="kpi-value text-cyan" id="kpi-potential-savings">$0.00</div>
+                        <div class="kpi-footer">Identified idle & rightsizing</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-top">
+                            <span class="kpi-name">Active Governance</span>
+                            <span class="kpi-tag">Control Plane</span>
+                        </div>
+                        <div class="kpi-value" id="kpi-autonomy-level">L4 Limited</div>
+                        <div class="kpi-footer" id="kpi-pending-approvals">0 pending human approvals</div>
                     </div>
                 </div>
-                <div class="top-right">
-                    <button id="story-mode-btn" class="btn btn-primary btn-spark">Start Story Mode Tour</button>
-                    <button id="start-demo-btn" class="btn btn-secondary">Scan Environment</button>
-                    <div class="badge-live-mode">Demo Mode</div>
-                </div>
-            </header>
 
-            <!-- Workspace Viewport -->
-            <div class="workspace-viewport">
-                
-                <!-- ==================== TAB: DASHBOARD ==================== -->
-                <div id="tab-dashboard" class="tab-panel active">
-                    <!-- 6 KPI metrics -->
-                    <section class="kpi-grid">
-                        <div class="kpi-card">
-                            <div class="kpi-label">Discovered Resources</div>
-                            <div id="kpi-resources" class="kpi-value">0</div>
-                            <div class="kpi-subtext">Across active providers</div>
+                <!-- Two-Column Operational Panels -->
+                <div class="dashboard-split-grid">
+                    <!-- Left: Current Agent & Active Operation -->
+                    <div class="card-panel">
+                        <div class="panel-header">
+                            <h2 class="panel-title">Active Reasoning & Operation</h2>
+                            <span class="status-pill pill-active" id="live-operation-status">STANDBY</span>
                         </div>
-                        <div class="kpi-card">
-                            <div class="kpi-label">Current Monthly Spend</div>
-                            <div id="kpi-cost" class="kpi-value">$0</div>
-                            <div class="kpi-subtext">Aggregated billing baseline</div>
-                        </div>
-                        <div class="kpi-card">
-                            <div class="kpi-label">Monthly Potential Savings</div>
-                            <div id="kpi-savings" class="kpi-value">$0</div>
-                            <div class="kpi-subtext">Target waste reduction</div>
-                        </div>
-                        <div class="kpi-card">
-                            <div class="kpi-label">Critical Security Risks</div>
-                            <div id="kpi-risks" class="kpi-value">0</div>
-                            <div class="kpi-subtext">Redundancy or SPOF alerts</div>
-                        </div>
-                        <div class="kpi-card">
-                            <div class="kpi-label">Logical Applications</div>
-                            <div id="kpi-apps" class="kpi-value">0</div>
-                            <div class="kpi-subtext">Service boundary graphs</div>
-                        </div>
-                        <div class="kpi-card">
-                            <div class="kpi-label">AI Consensus Confidence</div>
-                            <div id="kpi-confidence" class="kpi-value">98.4%</div>
-                            <div class="kpi-subtext">Council voting threshold</div>
-                        </div>
-                    </section>
-
-                    <div class="layout-grid-dashboard">
-                        <!-- Left Column -->
-                        <div class="dashboard-left-col">
-                            <!-- Future Forecast -->
-                            <div class="panel">
-                                <h2 class="panel-title">Cloud Spend & Risk Forecast (No Action)</h2>
-                                <div class="forecast-grid">
-                                    <div class="forecast-card">
-                                        <div class="forecast-time">30 Days</div>
-                                        <div class="forecast-value warning">+6% cost</div>
-                                        <div class="forecast-risk">Risk: Low</div>
-                                    </div>
-                                    <div class="forecast-card">
-                                        <div class="forecast-time">90 Days</div>
-                                        <div class="forecast-value danger">+18% cost</div>
-                                        <div class="forecast-risk warning">Risk: Medium</div>
-                                    </div>
-                                    <div class="forecast-card">
-                                        <div class="forecast-time">365 Days</div>
-                                        <div class="forecast-value critical">+41% cost</div>
-                                        <div class="forecast-risk danger">Risk: Critical</div>
-                                    </div>
+                        <div class="operational-detail-box">
+                            <div class="op-row">
+                                <span class="op-label">Current Agent:</span>
+                                <span class="op-val" id="live-agent-name">Decision Engine (M9)</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Current Operation:</span>
+                                <span class="op-val" id="live-operation-desc">Evaluating candidate rightsizing for non-prod instances</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Tool Call:</span>
+                                <span class="op-code-val" id="live-tool-call">simulator_action(rightsize_instance)</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Confidence:</span>
+                                <div class="op-meter-box">
+                                    <div class="op-meter-fill" id="live-confidence-bar" style="width: 88%;"></div>
                                 </div>
+                                <span class="op-val" id="live-confidence-text">88.0%</span>
                             </div>
-
-                            <!-- AI Reasoning Pipeline -->
-                            <div class="panel">
-                                <h2 class="panel-title">AI Thinking Timeline</h2>
-                                <div class="pipeline-timeline select-timeline">
-                                    <!-- Steps populated dynamically or static hooks -->
-                                    <div class="pipeline-step" data-step="M1_IDA">
-                                        <div class="step-icon"></div>
-                                        <div class="step-details">
-                                            <div class="step-name">Infrastructure Scan (M1)</div>
-                                            <div class="step-status">Idle</div>
-                                        </div>
-                                    </div>
-                                    <div class="pipeline-step" data-step="M2_CIA">
-                                        <div class="step-icon"></div>
-                                        <div class="step-details">
-                                            <div class="step-name">Cost Baseline Analysis (M2)</div>
-                                            <div class="step-status">Idle</div>
-                                        </div>
-                                    </div>
-                                    <div class="pipeline-step" data-step="M3_AIA">
-                                        <div class="step-icon"></div>
-                                        <div class="step-details">
-                                            <div class="step-name">Application Mapping (M3)</div>
-                                            <div class="step-status">Idle</div>
-                                        </div>
-                                    </div>
-                                    <div class="pipeline-step" data-step="M4_RIA">
-                                        <div class="step-icon"></div>
-                                        <div class="step-details">
-                                            <div class="step-name">Risk Prediction Models (M4)</div>
-                                            <div class="step-status">Idle</div>
-                                        </div>
-                                    </div>
-                                    <div class="pipeline-step" data-step="M5_SA">
-                                        <div class="step-icon"></div>
-                                        <div class="step-details">
-                                            <div class="step-name">Strategy Generation (M5)</div>
-                                            <div class="step-status">Idle</div>
-                                        </div>
-                                    </div>
-                                    <div class="pipeline-step" data-step="M6_DTS">
-                                        <div class="step-icon"></div>
-                                        <div class="step-details">
-                                            <div class="step-name">Digital Twin Simulation (M6)</div>
-                                            <div class="step-status">Idle</div>
-                                        </div>
-                                    </div>
-                                    <div class="pipeline-step" data-step="M7_EE">
-                                        <div class="step-icon"></div>
-                                        <div class="step-details">
-                                            <div class="step-name">Explainability Check (M7)</div>
-                                            <div class="step-status">Idle</div>
-                                        </div>
-                                    </div>
-                                    <div class="pipeline-step" data-step="M8_LEA">
-                                        <div class="step-icon"></div>
-                                        <div class="step-details">
-                                            <div class="step-name">Continuous Learning Loop (M8)</div>
-                                            <div class="step-status">Idle</div>
-                                        </div>
-                                    </div>
-                                    <div class="pipeline-step" data-step="M9_DE">
-                                        <div class="step-icon"></div>
-                                        <div class="step-details">
-                                            <div class="step-name">Decision Council Review (M9)</div>
-                                            <div class="step-status">Idle</div>
-                                        </div>
-                                    </div>
-                                    <div class="pipeline-step" data-step="M10_AEA">
-                                        <div class="step-icon"></div>
-                                        <div class="step-details">
-                                            <div class="step-name">Autonomous Execution (M10)</div>
-                                            <div class="step-status">Idle</div>
-                                        </div>
-                                    </div>
-                                </div>
+                            <div class="op-row">
+                                <span class="op-label">Risk Rating:</span>
+                                <span class="badge-risk-low" id="live-risk-badge">LOW</span>
                             </div>
                         </div>
-
-                        <!-- Right Column -->
-                        <div class="dashboard-right-col">
-                            <!-- Digital Twin Simulator -->
-                            <div class="panel">
-                                <h2 class="panel-title">Digital Twin Virtual Simulator</h2>
-                                <div class="twin-state-grid">
-                                    <div class="state-card">
-                                        <div class="state-title">Current SLA</div>
-                                        <div class="state-metric-val">99.1%</div>
-                                    </div>
-                                    <div class="state-card success">
-                                        <div class="state-title">Simulated SLA</div>
-                                        <div class="state-metric-val">99.99%</div>
-                                    </div>
-                                </div>
-                                <div class="twin-steps-list">
-                                    <div class="twin-step" id="twin-step-1">1. Virtual copy constructed</div>
-                                    <div class="twin-step" id="twin-step-2">2. Scaling modifications simulated</div>
-                                    <div class="twin-step" id="twin-step-3">3. Failure scenarios tested</div>
-                                    <div class="twin-step" id="twin-step-4">4. Reversion validated</div>
-                                </div>
-                                <button id="run-twin-simulation-btn" class="btn btn-primary" style="width: 100%; margin-top: 15px;">Execute Simulation Run</button>
-                            </div>
-
-                            <!-- Live Agent Feed -->
-                            <div class="panel">
-                                <h2 class="panel-title">Live Agent Activity Log</h2>
-                                <ul id="live-activity-log" class="activity-feed">
-                                    <li class="feed-item">
-                                        <span class="feed-time">SYSTEM</span>
-                                        <span class="feed-text">Autonomous operating system is initialized. Waiting...</span>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ==================== TAB: TOPOLOGY GRAPH ==================== -->
-                <div id="tab-graph" class="tab-panel">
-                    <div class="graph-layout">
-                        <div class="graph-canvas-container">
-                            <div class="graph-header">Interactive Infrastructure Map</div>
-                            <svg id="infra-svg" width="100%" height="450px"></svg>
-                        </div>
-                        <div id="graph-details-panel" class="graph-details-panel">
-                            <h3 class="panel-subtitle">Resource Inspector</h3>
-                            <div class="empty-state">Click on any map node to load parameters.</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ==================== TAB: WORKSPACES ==================== -->
-                <div id="tab-workspaces" class="tab-panel">
-                    <div class="workspace-tabs-header">
-                        <button class="agent-tab-btn active" data-agent="infra">Discovery Agent (M1)</button>
-                        <button class="agent-tab-btn" data-agent="cost">Cost Agent (M2)</button>
-                        <button class="agent-tab-btn" data-agent="app">Application Agent (M3)</button>
-                        <button class="agent-tab-btn" data-agent="risk">Risk Agent (M4)</button>
-                        <button class="agent-tab-btn" data-agent="council">Decision Council (M9)</button>
-                    </div>
-
-                    <div id="agent-workspace-body" class="panel workspace-body">
-                        <!-- Content populated dynamically via app.js -->
-                    </div>
-                </div>
-
-                <!-- ==================== TAB: RECOMMENDATIONS ==================== -->
-                <div id="tab-recommendations" class="tab-panel">
-                    <div class="recommendations-header">
-                        <div class="sorting-controls">
-                            <span>Sort By:</span>
-                            <button class="btn btn-secondary active sort-btn" data-sort="savings">Monthly Savings</button>
-                            <button class="btn btn-secondary sort-btn" data-sort="risk">Risk Level</button>
-                            <button class="btn btn-secondary sort-btn" data-sort="confidence">Confidence</button>
-                        </div>
-                    </div>
-                    <div id="recommendation-center-grid" class="recommendation-center-grid">
-                        <!-- Dynamic recommendations -->
-                    </div>
-                </div>
-
-                <!-- ==================== TAB: COPILOT ==================== -->
-                <div id="tab-copilot" class="tab-panel">
-                    <div class="copilot-container">
-                        <div class="copilot-messages-box" id="copilot-chat-history">
-                            <div class="copilot-message agent">
-                                Hello! I am your CloudPilot Copilot. I have access to your topology graphs, daily logs, strategy matrices, and Decision records. Ask me anything!
-                            </div>
-                        </div>
-                        
-                        <div class="copilot-suggestions">
-                            <button class="suggestion-chip">Why is my bill increasing?</button>
-                            <button class="suggestion-chip">Find idle GPUs.</button>
-                            <button class="suggestion-chip">Can we save 20%?</button>
-                            <button class="suggestion-chip">Show risky applications.</button>
-                        </div>
-
-                        <form id="copilot-query-form" class="copilot-input-bar">
-                            <input type="text" id="copilot-input-field" placeholder="Ask Copilot a question..." required autocomplete="off" />
-                            <button type="submit" class="btn btn-primary">Send</button>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- ==================== TAB: LEARNING ==================== -->
-                <div id="tab-learning" class="tab-panel">
-                    <div class="learning-kpis">
-                        <div class="kpi-card">
-                            <div class="kpi-label">Completed Optimizations</div>
-                            <div class="kpi-value">187</div>
-                        </div>
-                        <div class="kpi-card">
-                            <div class="kpi-label">Success Rate</div>
-                            <div class="kpi-value success">97.3%</div>
-                        </div>
-                        <div class="kpi-card">
-                            <div class="kpi-label">Rollback Rate</div>
-                            <div class="kpi-value danger">1.8%</div>
+                        <div class="panel-actions">
+                            <button class="btn-secondary" id="btn-inspect-evidence">Expand Full Evidence</button>
+                            <button class="btn-secondary" id="btn-view-agent-workspace">Open Agent Workspace</button>
                         </div>
                     </div>
 
-                    <div class="panel">
-                        <h2 class="panel-title">Recent Lessons Learned (Cloud DNA)</h2>
-                        <ul class="lessons-list">
-                            <li class="lesson-item">
-                                <strong>Payment API replicas rule:</strong> M8 learned that the Payment API service experiences service interruptions below 3 replicas. Minimum autoscaler limit configured to 3.
-                            </li>
-                            <li class="lesson-item">
-                                <strong>GPU off-hour scaling:</strong> ML cluster nodes should scale down at 19:00 to conserve budget. Peak training activity happens 09:00 - 18:00.
-                            </li>
-                            <li class="lesson-item">
-                                <strong>Compliance regions validation:</strong> Resources containing database logs must adhere to regional policies (`eu-west-1` only) to satisfy GDPR compliance.
-                            </li>
+                    <!-- Right: Quick Activity Log Stream -->
+                    <div class="card-panel">
+                        <div class="panel-header">
+                            <h2 class="panel-title">Live Activity Feed</h2>
+                            <span class="panel-meta">Real-time SSE events</span>
+                        </div>
+                        <ul class="activity-feed-compact" id="overview-activity-feed">
+                            <li class="feed-item-empty">Listening for live agent events...</li>
                         </ul>
                     </div>
                 </div>
+            </section>
 
-            </div>
+            <!-- 2. AGENT ACTIVITY TIMELINE -->
+            <section class="view-panel" id="view-activity" aria-labelledby="heading-activity">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-activity">Agent Activity Timeline</h1>
+                        <p class="view-subtitle">Chronological, explainable event stream of autonomous agent thoughts, operations, and tool calls.</p>
+                    </div>
+                    <div class="filter-group">
+                        <select id="activity-filter-agent" class="filter-select">
+                            <option value="ALL">All Agents</option>
+                            <option value="M1">M1 Discovery</option>
+                            <option value="M2">M2 Cost</option>
+                            <option value="M4">M4 Risk</option>
+                            <option value="M5">M5 Strategy</option>
+                            <option value="M6">M6 Digital Twin</option>
+                            <option value="M9">M9 Decision</option>
+                            <option value="M10">M10 Execution</option>
+                            <option value="TrueForge">TrueForge Runtime</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-panel">
+                    <div class="timeline-container" id="full-activity-timeline">
+                        <!-- Populated dynamically via app.js -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. AGENT WORKSPACE -->
+            <section class="view-panel" id="view-agent-workspace" aria-labelledby="heading-agent-workspace">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-agent-workspace">Agent Workspace</h1>
+                        <p class="view-subtitle">Deep inspection of individual autonomous intelligence modules, internal states, and tool invocations.</p>
+                    </div>
+                </div>
+                <div class="agent-tabs-bar" role="tablist">
+                    <button class="agent-nav-tab active" data-agent="M1">M1 Discovery</button>
+                    <button class="agent-nav-tab" data-agent="M2">M2 Cost</button>
+                    <button class="agent-nav-tab" data-agent="M3">M3 App Intelligence</button>
+                    <button class="agent-nav-tab" data-agent="M4">M4 Risk</button>
+                    <button class="agent-nav-tab" data-agent="M5">M5 Strategy</button>
+                    <button class="agent-nav-tab" data-agent="M6">M6 Digital Twin</button>
+                    <button class="agent-nav-tab" data-agent="M7">M7 Explainability</button>
+                    <button class="agent-nav-tab" data-agent="M8">M8 Learning</button>
+                    <button class="agent-nav-tab" data-agent="M9">M9 Decision Council</button>
+                    <button class="agent-nav-tab" data-agent="TrueForge">TrueForge Runtime</button>
+                </div>
+                <div class="card-panel" id="agent-workspace-content">
+                    <!-- Dynamic Agent Inspector loaded here -->
+                </div>
+            </section>
+
+            <!-- 4. INFRASTRUCTURE EXPLORER -->
+            <section class="view-panel" id="view-infrastructure" aria-labelledby="heading-infra">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-infra">Infrastructure Explorer</h1>
+                        <p class="view-subtitle">Discovered cloud resources across compute, database, storage, Kubernetes, and VPC networking.</p>
+                    </div>
+                    <div class="filter-group">
+                        <button class="btn-filter active" data-infra-filter="ALL">All (<span id="count-infra-all">0</span>)</button>
+                        <button class="btn-filter" data-infra-filter="COMPUTE">Compute</button>
+                        <button class="btn-filter" data-infra-filter="DATABASE">Databases</button>
+                        <button class="btn-filter" data-infra-filter="STORAGE">Storage</button>
+                        <button class="btn-filter" data-infra-filter="K8S">Kubernetes</button>
+                    </div>
+                </div>
+                <div class="table-card">
+                    <table class="data-table" id="infra-table">
+                        <thead>
+                            <tr>
+                                <th>Resource ID</th>
+                                <th>Type / Service</th>
+                                <th>Environment</th>
+                                <th>Criticality</th>
+                                <th>State</th>
+                                <th>Monthly Cost</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="infra-table-body">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 5. COST INTELLIGENCE -->
+            <section class="view-panel" id="view-cost" aria-labelledby="heading-cost">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-cost">Cost Intelligence (M2)</h1>
+                        <p class="view-subtitle">Billing baselines, service cost breakdowns, idle waste discovery, and multi-horizon forecasts.</p>
+                    </div>
+                </div>
+                <div class="cards-grid-3">
+                    <div class="card-panel">
+                        <h3 class="panel-subtitle">Current Monthly Spend</h3>
+                        <div class="large-stat" id="cost-monthly-spend">$0.00</div>
+                        <p class="stat-desc">Aggregated baseline across all accounts</p>
+                    </div>
+                    <div class="card-panel">
+                        <h3 class="panel-subtitle">Identified Waste</h3>
+                        <div class="large-stat text-amber" id="cost-waste-spend">$0.00</div>
+                        <p class="stat-desc">Idle instances, unattached EBS, overprovisioned RDS</p>
+                    </div>
+                    <div class="card-panel">
+                        <h3 class="panel-subtitle">Potential Savings</h3>
+                        <div class="large-stat text-emerald" id="cost-potential-spend">$0.00</div>
+                        <p class="stat-desc">Achievable via rightsizing & policy automation</p>
+                    </div>
+                </div>
+                <div class="card-panel">
+                    <h3 class="panel-title">Cost Forecast (No-Action Projection)</h3>
+                    <div class="forecast-bars" id="cost-forecast-container">
+                        <div class="forecast-col">
+                            <span class="forecast-period">30 Days</span>
+                            <span class="forecast-delta text-amber">+6.2% ($ spend increase)</span>
+                            <span class="forecast-note">Normal organic data growth</span>
+                        </div>
+                        <div class="forecast-col">
+                            <span class="forecast-period">90 Days</span>
+                            <span class="forecast-delta text-amber">+17.8% ($ spend increase)</span>
+                            <span class="forecast-note">Compounded storage & autoscaling</span>
+                        </div>
+                        <div class="forecast-col">
+                            <span class="forecast-period">365 Days</span>
+                            <span class="forecast-delta text-crimson">+43.5% ($ spend increase)</span>
+                            <span class="forecast-note">Unmanaged cluster sprawl</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 6. RISK EXPLORER -->
+            <section class="view-panel" id="view-risk" aria-labelledby="heading-risk">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-risk">Risk Explorer (M4)</h1>
+                        <p class="view-subtitle">Blast radius analysis, single points of failure (SPOFs), SLO breach probabilities, and dependency failure paths.</p>
+                    </div>
+                </div>
+                <div class="card-panel">
+                    <h3 class="panel-title">Active Risk Assessments</h3>
+                    <div class="risk-assessments-list" id="risk-assessments-container">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- 7. STRATEGY WORKSPACE -->
+            <section class="view-panel" id="view-strategy" aria-labelledby="heading-strategy">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-strategy">Strategy Workspace (M5)</h1>
+                        <p class="view-subtitle">Candidate optimization opportunities, priority matrices, and actionable execution roadmaps.</p>
+                    </div>
+                </div>
+                <div class="card-panel">
+                    <h3 class="panel-title">Synthesized Optimization Strategies</h3>
+                    <div class="recommendations-container" id="strategy-recommendations-container">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- 8. DIGITAL TWIN -->
+            <section class="view-panel" id="view-digital-twin" aria-labelledby="heading-twin">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-twin">Digital Twin Virtual Simulator (M6)</h1>
+                        <p class="view-subtitle">Pre-execution virtual simulation: counterfactual testing of cost reduction, latency impact, and SLA preservation.</p>
+                    </div>
+                    <button class="btn-primary" id="btn-run-simulation">Execute Simulation Test</button>
+                </div>
+                <div class="card-panel">
+                    <div class="simulation-comparison-grid">
+                        <div class="sim-card baseline">
+                            <h3>Current Baseline</h3>
+                            <div class="sim-metric"><span>Monthly Cost:</span> <strong id="sim-base-cost">$0.00</strong></div>
+                            <div class="sim-metric"><span>p99 Latency:</span> <strong>42.0 ms</strong></div>
+                            <div class="sim-metric"><span>Availability:</span> <strong>99.99%</strong></div>
+                            <div class="sim-metric"><span>Risk Level:</span> <strong>LOW</strong></div>
+                        </div>
+                        <div class="sim-card projected highlight-green">
+                            <h3>Simulated Post-Optimization</h3>
+                            <div class="sim-metric"><span>Monthly Cost:</span> <strong class="text-emerald" id="sim-proj-cost">$0.00</strong></div>
+                            <div class="sim-metric"><span>p99 Latency:</span> <strong>42.8 ms (+0.8ms)</strong></div>
+                            <div class="sim-metric"><span>Availability:</span> <strong>99.99% (Preserved)</strong></div>
+                            <div class="sim-metric"><span>Simulation Verdict:</span> <strong class="text-emerald">VERIFIED SAFE</strong></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 9. DECISION COUNCIL -->
+            <section class="view-panel" id="view-decision-council" aria-labelledby="heading-council">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-council">Decision Council (M9)</h1>
+                        <p class="view-subtitle">Multi-agent consensus voting: balancing cost reduction, architectural resilience, risk tolerance, and compliance.</p>
+                    </div>
+                </div>
+                <div class="card-panel">
+                    <div class="council-consensus-box">
+                        <div class="consensus-header">
+                            <span class="council-badge">Consensus Status: APPROVED</span>
+                            <span class="consensus-score">Overall Confidence: <strong>92.5%</strong></span>
+                        </div>
+                        <div class="council-votes-grid" id="council-votes-grid">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 10. APPROVAL CENTER -->
+            <section class="view-panel" id="view-approvals" aria-labelledby="heading-approvals">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-approvals">Approval Center</h1>
+                        <p class="view-subtitle">Human-in-the-loop governance: review gated actions, inspect blast radius, and approve or reject.</p>
+                    </div>
+                </div>
+                <div class="card-panel">
+                    <div class="approvals-list" id="approvals-list-container">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- 11. EXECUTION CONSOLE -->
+            <section class="view-panel" id="view-execution" aria-labelledby="heading-exec">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-exec">Execution Console (M10 & TrueForge)</h1>
+                        <p class="view-subtitle">Live operational execution logs, sandbox run status, and active resource lock indicators.</p>
+                    </div>
+                </div>
+                <div class="terminal-panel">
+                    <div class="terminal-header">
+                        <span class="terminal-title">TrueForge Sandbox Execution Terminal</span>
+                        <span class="terminal-status" id="exec-terminal-status">IDLE</span>
+                    </div>
+                    <pre class="terminal-body" id="execution-terminal-log">
+[SYSTEM] Autonomous Execution Console initialized.
+[SYSTEM] Ready for authorized operational plans.
+                    </pre>
+                </div>
+            </section>
+
+            <!-- 12. ROLLBACK VIEW -->
+            <section class="view-panel" id="view-rollback" aria-labelledby="heading-rollback">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-rollback">Automated Rollback Center</h1>
+                        <p class="view-subtitle">Deterministic, idempotent, auditable, and validated automated rollbacks.</p>
+                    </div>
+                    <button class="btn-emergency-stop" id="btn-manual-rollback-trigger">Trigger Manual Rollback</button>
+                </div>
+                <div class="card-panel">
+                    <div class="rollback-history-list" id="rollback-history-container">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- 13. LEARNING TIMELINE -->
+            <section class="view-panel" id="view-learning" aria-labelledby="heading-learning">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-learning">Continuous Learning Loop (M8)</h1>
+                        <p class="view-subtitle">Organizational Cloud DNA profile, experience replay memories, and continuous improvement metrics.</p>
+                    </div>
+                </div>
+                <div class="card-panel">
+                    <h3 class="panel-title">Cloud DNA Behavioral Profile</h3>
+                    <div class="dna-metrics-grid" id="dna-metrics-container">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- 14. SAVINGS ATTRIBUTION -->
+            <section class="view-panel" id="view-attribution" aria-labelledby="heading-attribution">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-attribution">3-Way Savings Attribution</h1>
+                        <p class="view-subtitle">Rigorous economic breakdown: Predicted Savings vs. Verified Savings vs. Risk-Discounted Annualized Savings.</p>
+                    </div>
+                </div>
+                <div class="cards-grid-3">
+                    <div class="card-panel">
+                        <h3 class="panel-subtitle">1. Predicted Savings</h3>
+                        <div class="large-stat text-cyan" id="attr-predicted-val">$0.00</div>
+                        <p class="stat-desc">Ex-ante recommendation estimate</p>
+                    </div>
+                    <div class="card-panel highlight-green">
+                        <h3 class="panel-subtitle">2. Verified Savings</h3>
+                        <div class="large-stat text-emerald" id="attr-verified-val">$0.00</div>
+                        <p class="stat-desc">Ex-post measured monthly reduction</p>
+                    </div>
+                    <div class="card-panel">
+                        <h3 class="panel-subtitle">3. Annualized Savings</h3>
+                        <div class="large-stat" id="attr-annualized-val">$0.00</div>
+                        <p class="stat-desc">Risk-discounted 12-month run-rate</p>
+                    </div>
+                </div>
+                <div class="card-panel">
+                    <h3 class="panel-title">Realization Performance</h3>
+                    <div class="realization-bar-box">
+                        <div class="realization-bar-fill" id="attr-realization-fill" style="width: 100%;"></div>
+                    </div>
+                    <p class="stat-desc" id="attr-realization-desc">Realization Rate: 100.0% of predicted savings verified.</p>
+                </div>
+            </section>
+
+            <!-- 15. CLOUDPILOT COPILOT VIEW -->
+            <section class="view-panel" id="view-copilot-view" aria-labelledby="heading-copilot-view">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title" id="heading-copilot-view">CloudPilot AI Copilot</h1>
+                        <p class="view-subtitle">Conversational platform assistant: ask questions, analyze risks, inspect topologies, or trigger operations.</p>
+                    </div>
+                </div>
+                <div class="copilot-full-container">
+                    <div class="copilot-conversation-box" id="copilot-chat-box">
+                        <div class="copilot-bubble assistant">
+                            Hello Operator. I am connected to CloudPilot's live intelligence pipeline, simulator, and governance engines. What operational objective or question can I assist you with?
+                        </div>
+                    </div>
+                    <div class="copilot-quick-prompts">
+                        <button class="prompt-chip" data-prompt="Why is my monthly spend increasing?">Why is my monthly spend increasing?</button>
+                        <button class="prompt-chip" data-prompt="Find idle compute instances and calculate waste">Find idle compute and waste</button>
+                        <button class="prompt-chip" data-prompt="What are our critical single points of failure?">What are our critical SPOFs?</button>
+                        <button class="prompt-chip" data-prompt="Are there any pending human approvals?">Check pending approvals</button>
+                    </div>
+                    <form class="copilot-input-row" id="copilot-form">
+                        <input type="text" id="copilot-query-input" placeholder="Type an operational question or command..." required autocomplete="off">
+                        <button type="submit" class="btn-primary">Send Query</button>
+                    </form>
+                </div>
+            </section>
+
         </main>
     </div>
+
+    <!-- Universal Expandable Evidence Modal -->
+    <div class="modal-backdrop" id="evidence-modal" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modal-evidence-title">Operational Evidence & Audit Proof</h3>
+                <button class="modal-close-btn" id="modal-evidence-close" aria-label="Close modal">✕</button>
+            </div>
+            <div class="modal-body" id="modal-evidence-body">
+                <pre class="evidence-json" id="modal-evidence-pre"></pre>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="modal-evidence-done">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Human Approval Modal -->
+    <div class="modal-backdrop" id="approval-modal" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modal-approval-title">Human Authorization Decision</h3>
+                <button class="modal-close-btn" id="modal-approval-close" aria-label="Close modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p id="modal-approval-desc"></p>
+                <div class="form-group">
+                    <label for="approval-approver-input">Operator Name / Identity</label>
+                    <input type="text" id="approval-approver-input" class="form-input" value="Lead-Architect" required>
+                </div>
+                <div class="form-group">
+                    <label for="approval-reason-input">Decision Rationale / Notes</label>
+                    <textarea id="approval-reason-input" class="form-textarea" placeholder="Provide reason for approval or rejection..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-emergency-stop" id="modal-approval-reject-btn">Reject Action</button>
+                <button class="btn-primary" id="modal-approval-approve-btn">Authorize Execution</button>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>

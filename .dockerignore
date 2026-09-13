@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.git
+.gitignore
+.env
+.env.*
+*.log
+scratch/
+.system_generated/
+*.md
+!EXECUTIVE_SUMMARY.md

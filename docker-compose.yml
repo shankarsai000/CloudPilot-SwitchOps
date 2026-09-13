@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   cloudpilot-api:
     build:
@@ -9,12 +7,70 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - ENVIRONMENT=production
       - PORT=8000
-      - LOG_LEVEL=info
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      - DATABASE_URL=postgresql+psycopg2://cloudpilot:cloudpilot_secure_password@postgres:5432/cloudpilot
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=production-secure-jwt-secret-key-replace-in-vault-32char!
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/demo/health"]
-      interval: 15s
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 5s
+      start_period: 10s
     restart: unless-stopped
+    networks:
+      - cloudpilot-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cloudpilot-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=cloudpilot
+      - POSTGRES_PASSWORD=cloudpilot_secure_password
+      - POSTGRES_DB=cloudpilot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudpilot -d cloudpilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - cloudpilot-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: cloudpilot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - cloudpilot-net
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+
+networks:
+  cloudpilot-net:
+    driver: bridge

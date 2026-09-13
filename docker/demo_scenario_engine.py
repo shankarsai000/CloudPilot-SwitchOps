@@ -63,6 +63,13 @@ class ScenarioEngine:
         self.opportunities.clear()
         self.events.clear()
 
+        # Synchronize with Digital Enterprise Simulator
+        try:
+            from simulator.engine import get_simulator
+            get_simulator().generate(profile=profile, seed=self.seed or 42)
+        except Exception as sim_exc:
+            logger.debug("Enterprise simulator background sync: %s", sim_exc)
+
         # Route to scenario generator helper
         if profile == "Healthcare":
             self._generate_healthcare_profile()

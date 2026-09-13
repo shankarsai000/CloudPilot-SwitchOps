@@ -194,7 +194,7 @@ def create_discovery_router(repository=None, agent=None) -> APIRouter:
     @router.get("/resources/{resource_id}/dependencies")
     async def get_dependencies(
         resource_id: str,
-        direction: str = Query("outgoing", regex="^(outgoing|incoming|both)$"),
+        direction: str = Query("outgoing", pattern="^(outgoing|incoming|both)$"),
     ) -> dict[str, list[DependencyResponse]]:
         """
         Get resource dependencies.

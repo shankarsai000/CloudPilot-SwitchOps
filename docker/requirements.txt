@@ -16,6 +16,8 @@ kubernetes>=30.0.0
 # Database & ORM
 psycopg2-binary>=2.9.9
 sqlalchemy>=2.0.23
+alembic>=1.13.0
+redis>=5.0.0
 
 # Testing & Utilities
 pytest>=8.0.0

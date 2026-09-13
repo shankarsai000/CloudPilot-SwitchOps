@@ -1,5 +1,5 @@
 """
-Simulator Component
+Simulator Component (Digital Twin M6)
 
 Coordinates predictors and safety scoring engines to run simulations against the virtual DigitalTwin.
 """
@@ -47,7 +47,7 @@ class Simulator:
         action: str,
         parameters: dict[str, Any],
         twin_context: DigitalTwin,
-        policy_violations: list[str] = None
+        policy_violations: list[str] = None,
     ) -> SimulationReport:
         """Execute a simulated action run against the twin state variables.
 
@@ -95,5 +95,5 @@ class Simulator:
             cost=cost,
             rollback=rollback,
             cascading_failures=failures,
-            execution_readiness_score=round(readiness, 1)
+            execution_readiness_score=round(readiness, 1),
         )

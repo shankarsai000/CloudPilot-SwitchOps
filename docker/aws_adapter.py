@@ -24,6 +24,11 @@ from models_resource import (
     ResourceType,
 )
 
+try:
+    import boto3
+except ImportError:
+    boto3 = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,10 +87,8 @@ class AWSAdapter(BaseCloudAdapter):
         Raises:
             CloudAdapterError: If boto3 not installed or init fails
         """
-        try:
-            import boto3
-        except ImportError as e:
-            raise CloudAdapterError("boto3 library required for AWS support") from e
+        if boto3 is None:
+            raise CloudAdapterError("boto3 library required for AWS support")
 
         self.boto3 = boto3
         self.access_key_id = access_key_id
