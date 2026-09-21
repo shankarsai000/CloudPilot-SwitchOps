@@ -497,13 +497,17 @@ class TestImmutableAuditTrail:
         r1 = audit.record_action(actor="agent-01", objective="Original objective 1")
         r2 = audit.record_action(actor="agent-01", objective="Original objective 2")
 
-        # Corrupt block 1's payload without recalculating entry_hash
-        r1.objective = "Tampered unauthorized objective"
+        original_obj = r1.objective
+        try:
+            # Corrupt block 1's payload without recalculating entry_hash
+            r1.objective = "Tampered unauthorized objective"
 
-        is_valid, msg, broken_idx = audit.verify_integrity()
-        assert not is_valid
-        assert broken_idx == 0
-        assert "TAMPER_DETECTED" in msg or "HASH_CHAIN_BROKEN" in msg
+            is_valid, msg, broken_idx = audit.verify_integrity()
+            assert not is_valid
+            assert broken_idx == 0
+            assert "TAMPER_DETECTED" in msg or "HASH_CHAIN_BROKEN" in msg
+        finally:
+            r1.objective = original_obj
 
 
 # ═══════════════════════════════════════════════════════════════

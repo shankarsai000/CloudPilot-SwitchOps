@@ -329,3 +329,8 @@ _simulator = EnterpriseSimulator()
 def get_simulator() -> EnterpriseSimulator:
     """Return the singleton instance of EnterpriseSimulator."""
     return _simulator
+
+
+# Aliases for alternative naming conventions
+SimulatorEngine = EnterpriseSimulator
+get_simulator_engine = get_simulator

@@ -50,6 +50,7 @@ class ImmutableAuditTrail:
         """
         Append a new block to the immutable audit chain with cryptographic hash chaining.
         """
+        import copy
         now = datetime.now(timezone.utc)
         with self._mutex:
             seq = len(self._chain)
@@ -62,12 +63,12 @@ class ImmutableAuditTrail:
                 agent=agent,
                 timestamp=now,
                 objective=objective,
-                plan=plan or {},
-                evidence=evidence or {},
-                policy_evaluation=policy_evaluation or {},
-                approval=approval,
+                plan=copy.deepcopy(plan) if plan else {},
+                evidence=copy.deepcopy(evidence) if evidence else {},
+                policy_evaluation=copy.deepcopy(policy_evaluation) if policy_evaluation else {},
+                approval=copy.deepcopy(approval) if approval else None,
                 code=code,
-                execution_result=execution_result or {},
+                execution_result=copy.deepcopy(execution_result) if execution_result else {},
                 previous_hash=prev_hash,
                 entry_hash="",
             )

@@ -84,6 +84,19 @@ class SafetyControlPlane:
         self.approvals = approval_router or get_approval_router()
         self.audit = audit_trail or get_audit_trail()
 
+    def set_autonomy_level(
+        self,
+        level: AutonomyLevel,
+        actor: str = "operator",
+        reason: str = "Manual level adjustment",
+    ) -> AutonomyLevel:
+        """Set the global autonomy level."""
+        return self.autonomy.set_level(level, actor=actor, reason=reason)
+
+    def get_autonomy_level(self) -> AutonomyLevel:
+        """Get the current global autonomy level."""
+        return self.autonomy.get_level()
+
     # -------------------------------------------------------------------------
     # Evaluation & Routing
     # -------------------------------------------------------------------------

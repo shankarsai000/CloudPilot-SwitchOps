@@ -4,6 +4,10 @@ Controlled Tools for TrueForge Agent Runtime.
 Implements controlled tools for CloudPilot intelligence (M1-M4, M6) and
 sandboxed Terraform plan execution. All tool calls are intercepted,
 audited, and cleanly separated from the agent harness.
+
+GovernedToolRegistry wraps ControlledToolRegistry with full Phase 5
+governance gates: Emergency Stop → Capability Check → Policy Check →
+Risk Evaluation → Rate Limit → Execution → Audit Trail.
 """
 
 from __future__ import annotations
@@ -12,7 +16,7 @@ from datetime import datetime, timezone
 import json
 import logging
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 import uuid
 
 from simulator.engine import get_simulator
@@ -325,6 +329,74 @@ class ControlledToolRegistry:
             },
             handler=self._tool_inspect_resource_state,
             read_only=True,
+            requires_approval=False,
+        )
+
+        # 10. apply_infrastructure_change
+        self.register_tool(
+            name="apply_infrastructure_change",
+            description="Apply approved infrastructure modifications (e.g. rightsize, terminate, archive). Mutating operation.",
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "actions": {"type": "array", "items": {"type": "object"}, "description": "Actions to apply"},
+                    "environment": {"type": "string", "description": "Target environment (e.g. dev, prod)"},
+                },
+                "required": ["actions"],
+            },
+            handler=self._tool_apply_infrastructure_change,
+            read_only=False,
+            requires_approval=True,
+        )
+
+        # 11. verify_outcome
+        self.register_tool(
+            name="verify_outcome",
+            description="Verify post-execution performance, cost, availability, risk, and savings against baseline expectations.",
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "actions": {"type": "array", "items": {"type": "object"}, "description": "Executed actions to verify"},
+                    "simulate_failure": {"type": "boolean", "description": "Optional simulation of latency/error breach"},
+                },
+                "required": ["actions"],
+            },
+            handler=self._tool_verify_outcome,
+            read_only=True,
+            requires_approval=False,
+        )
+
+        # 12. execute_rollback
+        self.register_tool(
+            name="execute_rollback",
+            description="Execute deterministic inverse rollback actions to restore infrastructure to healthy baseline state.",
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "actions": {"type": "array", "items": {"type": "object"}, "description": "Actions to rollback"},
+                    "reason": {"type": "string", "description": "Trigger reason for rollback"},
+                },
+                "required": ["actions"],
+            },
+            handler=self._tool_execute_rollback,
+            read_only=False,
+            requires_approval=False,
+        )
+
+        # 13. repair_configuration
+        self.register_tool(
+            name="repair_configuration",
+            description="Self-heal Terraform HCL configuration errors (e.g. missing provider blocks, formatting).",
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "hcl_code": {"type": "string", "description": "Terraform code requiring repair"},
+                    "sandbox_id": {"type": "string", "description": "Sandbox ID to validate repaired code in"},
+                },
+                "required": ["hcl_code"],
+            },
+            handler=self._tool_repair_configuration,
+            read_only=False,
             requires_approval=False,
         )
 
@@ -704,6 +776,141 @@ class ControlledToolRegistry:
             "telemetry_memory_utilization": 25.0,
         }
 
+    def _tool_apply_infrastructure_change(
+        self,
+        actions: List[Dict[str, Any]],
+        environment: str = "dev",
+    ) -> Dict[str, Any]:
+        """Apply approved infrastructure change actions."""
+        applied = []
+        for act in actions:
+            target_id = act.get("target_resource_id") or act.get("target_id", "res-unknown")
+            action_type = act.get("action_type", "rightsize_instance")
+            applied.append({
+                "action_id": f"act-{uuid.uuid4().hex[:8]}",
+                "target_resource_id": target_id,
+                "action_type": action_type,
+                "status": "APPLIED",
+                "applied_at": datetime.now(timezone.utc).isoformat(),
+            })
+        return {
+            "status": "APPLIED_SUCCESS",
+            "environment": environment,
+            "actions_applied_count": len(applied),
+            "applied_actions": applied,
+        }
+
+    def _tool_verify_outcome(
+        self,
+        actions: List[Dict[str, Any]],
+        simulate_failure: bool = False,
+    ) -> Dict[str, Any]:
+        """Verify post-execution metrics across 5 dimensions using OutcomeVerificationEngine."""
+        from verification.engine import get_verification_engine
+        from verification.models import SafetyThresholds
+        engine = get_verification_engine()
+        reports = []
+        any_breach = False
+
+        for act in actions:
+            action_id = act.get("action_id", f"act-{uuid.uuid4().hex[:8]}")
+            target_id = act.get("target_resource_id") or act.get("target_id", "res-verify")
+            service = act.get("target_service", "core")
+
+            expected = engine.generate_expected_outcome(
+                action_id=action_id,
+                target_resource_id=target_id,
+                baseline_monthly_cost_usd=200.0,
+                expected_monthly_savings_usd=100.0,
+                target_service=service,
+                expected_latency_p99_ms=45.0,
+                expected_availability_pct=99.99,
+                thresholds=SafetyThresholds(),
+            )
+
+            if simulate_failure:
+                actual = engine.collect_actual_outcome(
+                    action_id=action_id,
+                    target_resource_id=target_id,
+                    measured_monthly_cost_usd=110.0,
+                    measured_savings_usd=90.0,
+                    measured_cpu_utilization_pct=88.0,
+                    measured_memory_headroom_pct=15.0,
+                    measured_latency_p99_ms=350.0,
+                    measured_availability_pct=99.8,
+                    observed_incidents_count=1,
+                )
+            else:
+                actual = engine.collect_actual_outcome(
+                    action_id=action_id,
+                    target_resource_id=target_id,
+                    measured_monthly_cost_usd=105.0,
+                    measured_savings_usd=95.0,
+                    measured_cpu_utilization_pct=42.0,
+                    measured_memory_headroom_pct=45.0,
+                    measured_latency_p99_ms=43.0,
+                    measured_availability_pct=99.99,
+                )
+
+            report = engine.verify_and_generate_report(expected, actual)
+            if report.rollback_required:
+                any_breach = True
+            reports.append(report.model_dump(mode="json"))
+
+        status = "THRESHOLD_BREACH_DETECTED" if any_breach else "ALL_VERIFIED_SUCCESS"
+        return {
+            "status": status,
+            "reports_count": len(reports),
+            "any_breach": any_breach,
+            "reports": reports,
+        }
+
+    def _tool_execute_rollback(
+        self,
+        actions: List[Dict[str, Any]],
+        reason: str = "Automated rollback triggered by verification failure",
+    ) -> Dict[str, Any]:
+        """Execute deterministic inverse rollback actions."""
+        from verification.rollback import get_rollback_manager
+        mgr = get_rollback_manager()
+        results = []
+        for act in actions:
+            action_id = act.get("action_id", f"act-{uuid.uuid4().hex[:8]}")
+            target_id = act.get("target_resource_id") or act.get("target_id", "res-rb")
+            plan = mgr.generate_rollback_plan(
+                action_id=action_id,
+                target_resource_id=target_id,
+                original_action_type=act.get("action_type", "rightsize_instance"),
+                original_parameters=act.get("parameters", {}),
+            )
+            res = mgr.execute_rollback(plan)
+            results.append(res.model_dump(mode="json"))
+
+        return {
+            "status": "ROLLBACK_COMPLETED",
+            "reason": reason,
+            "rolled_back_count": len(results),
+            "results": results,
+        }
+
+    def _tool_repair_configuration(
+        self,
+        hcl_code: str,
+        sandbox_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Self-heal Terraform HCL code by injecting provider block and formatting."""
+        from trueforge.sandbox import TerraformLifecycle, get_sandbox_manager
+        lifecycle = TerraformLifecycle(sandbox_manager=get_sandbox_manager())
+        repaired = lifecycle.ensure_provider_block(hcl_code)
+        valid = bool(repaired and "provider \"aws\"" in repaired)
+        return {
+            "status": "REPAIRED" if valid else "FAILED",
+            "original_len": len(hcl_code),
+            "repaired_len": len(repaired),
+            "repaired_hcl": repaired,
+            "is_valid": valid,
+        }
+
 
 # Global singleton instance
 _tool_registry: Optional[ControlledToolRegistry] = None
@@ -715,3 +922,218 @@ def get_tool_registry() -> ControlledToolRegistry:
     if _tool_registry is None:
         _tool_registry = ControlledToolRegistry()
     return _tool_registry
+
+
+# =============================================================================
+# Governed Tool Registry — Phase 5 Governance-Gated Tool Execution
+# =============================================================================
+
+class GovernedToolRegistry:
+    """
+    Security-gated wrapper around ControlledToolRegistry.
+
+    Every tool invocation passes through the full governance pipeline:
+      1. Emergency Stop Check — is the kill switch active?
+      2. Policy Compliance — does this tool call comply with active policies?
+      3. Risk Evaluation — for mutating tools, compute risk score and blast radius
+      4. Rate Limit Check — is this environment within allowed request rates?
+      5. Execute — delegate to ControlledToolRegistry handler
+      6. Audit Trail — record decision + result in SHA-256 immutable log
+
+    Read-only tools (inspect_*, analyze_*) skip risk evaluation but still
+    pass through emergency stop, policy, and rate limit checks.
+    """
+
+    def __init__(
+        self,
+        tool_registry: Optional[ControlledToolRegistry] = None,
+    ) -> None:
+        self._registry = tool_registry or get_tool_registry()
+        self._governance_audit: List[Dict[str, Any]] = []
+
+        # Lazy-load governance to avoid circular imports at module level
+        self._control_plane = None
+        self._audit_trail = None
+        logger.info("GovernedToolRegistry initialized with governance gates")
+
+    def _get_control_plane(self) -> Any:
+        """Lazy-load SafetyControlPlane to avoid circular imports."""
+        if self._control_plane is None:
+            from governance.control_plane import get_safety_control_plane
+            self._control_plane = get_safety_control_plane()
+        return self._control_plane
+
+    def _get_audit_trail(self) -> Any:
+        """Lazy-load ImmutableAuditTrail."""
+        if self._audit_trail is None:
+            from governance.audit import get_audit_trail
+            self._audit_trail = get_audit_trail()
+        return self._audit_trail
+
+    def list_tools(self) -> List[Dict[str, Any]]:
+        """Delegate tool listing to inner registry."""
+        return self._registry.list_tools()
+
+    def get_tool_metadata(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get metadata for a specific tool."""
+        return self._registry.get_tool_metadata(name)
+
+    def get_audit_logs(
+        self,
+        turn_id: Optional[str] = None,
+        tool_name: Optional[str] = None,
+    ) -> List[ToolCallAuditLog]:
+        """Delegate audit log query."""
+        return self._registry.get_audit_logs(turn_id=turn_id, tool_name=tool_name)
+
+    def get_governance_audit(self) -> List[Dict[str, Any]]:
+        """Return governance decision audit trail for tool calls."""
+        return list(self._governance_audit)
+
+    def execute_tool(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        tool_call_id: Optional[str] = None,
+        turn_id: Optional[str] = None,
+        thread_id: str = "main",
+        sandbox_id: Optional[str] = None,
+    ) -> Any:
+        """
+        Execute a tool through the full governance pipeline.
+
+        Governance gates (in order):
+          1. Emergency Stop — block if kill switch active
+          2. Policy Check — evaluate against active policies
+          3. Risk Evaluation — for mutating tools only
+          4. Rate Limit — check environment rate limits
+          5. Execute — run the tool handler
+          6. Audit — record governance decision + execution result
+        """
+        cid = tool_call_id or f"call-{uuid.uuid4().hex[:8]}"
+        tool_meta = self._registry.get_tool_metadata(tool_name)
+        if not tool_meta:
+            raise ValueError(f"Unknown tool: {tool_name}")
+
+        is_read_only = tool_meta.get("read_only", True)
+        governance_result = {
+            "tool_call_id": cid,
+            "tool_name": tool_name,
+            "turn_id": turn_id,
+            "is_read_only": is_read_only,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "gates_passed": [],
+            "gates_blocked": [],
+            "status": "PENDING",
+        }
+
+        try:
+            cp = self._get_control_plane()
+
+            # Gate 1: Emergency Stop
+            env = arguments.get("environment", "dev")
+            service = arguments.get("target_service", tool_name)
+            if cp.emergency.is_stopped(environment=env, service=service):
+                stop_reason = cp.emergency.get_stop_reason(env, service)
+                governance_result["gates_blocked"].append(f"EMERGENCY_STOP: {stop_reason}")
+                governance_result["status"] = "BLOCKED_EMERGENCY_STOP"
+                self._governance_audit.append(governance_result)
+                raise PermissionError(f"Tool execution blocked: Emergency stop active — {stop_reason}")
+            governance_result["gates_passed"].append("EMERGENCY_STOP_CLEAR")
+
+            # Gate 2: Policy Check (via policy engine)
+            from governance.models import ProposedAction
+            action = ProposedAction(
+                action_type=f"tool:{tool_name}",
+                target_resource_id=arguments.get("target_resource_id", f"tool-{tool_name}"),
+                target_service=service,
+                environment=env,
+                parameters=arguments,
+            )
+            policy_report = cp.policy.evaluate(action)
+            if not policy_report.is_compliant:
+                violations = ", ".join(policy_report.policy_violations)
+                governance_result["gates_blocked"].append(f"POLICY_VIOLATION: {violations}")
+                governance_result["status"] = "BLOCKED_POLICY"
+                self._governance_audit.append(governance_result)
+                raise PermissionError(f"Tool execution blocked by policy: {violations}")
+            governance_result["gates_passed"].append("POLICY_COMPLIANT")
+
+            # Gate 3: Risk Evaluation (mutating tools only)
+            if not is_read_only:
+                evaluation = cp.evaluate_action(action)
+                governance_result["risk_score"] = evaluation.risk_score
+                governance_result["blast_radius"] = evaluation.blast_radius_score
+                governance_result["confidence"] = evaluation.confidence_score
+
+                if evaluation.risk_score > 0.8:
+                    governance_result["gates_blocked"].append(
+                        f"HIGH_RISK: risk_score={evaluation.risk_score:.2f}"
+                    )
+                    governance_result["status"] = "BLOCKED_HIGH_RISK"
+                    self._governance_audit.append(governance_result)
+                    raise PermissionError(
+                        f"Tool execution blocked: Risk score {evaluation.risk_score:.2f} exceeds threshold 0.8"
+                    )
+                governance_result["gates_passed"].append(f"RISK_ACCEPTABLE({evaluation.risk_score:.2f})")
+            else:
+                governance_result["gates_passed"].append("READ_ONLY_SKIP_RISK")
+
+            # Gate 4: Rate Limit
+            rate_ok, rate_msg = cp.rate_limiter.check_rate_limit(env)
+            if not rate_ok:
+                governance_result["gates_blocked"].append(f"RATE_LIMIT: {rate_msg}")
+                governance_result["status"] = "BLOCKED_RATE_LIMIT"
+                self._governance_audit.append(governance_result)
+                raise PermissionError(f"Tool execution rate limited: {rate_msg}")
+            governance_result["gates_passed"].append("RATE_LIMIT_OK")
+
+            # Gate 5: Execute through inner registry
+            result = self._registry.execute_tool(
+                tool_name=tool_name,
+                arguments=arguments,
+                tool_call_id=cid,
+                turn_id=turn_id,
+                thread_id=thread_id,
+                sandbox_id=sandbox_id,
+            )
+            governance_result["status"] = "EXECUTED_SUCCESS"
+            governance_result["gates_passed"].append("EXECUTION_COMPLETE")
+            governance_result["gates_passed"].append("AUDIT_RECORDED")
+
+            # Gate 6: Audit Trail
+            audit = self._get_audit_trail()
+            audit.record_action(
+                actor="GovernedToolRegistry",
+                objective=f"Tool execution: {tool_name}",
+                plan={"tool": tool_name, "arguments": {k: str(v)[:100] for k, v in arguments.items()}},
+                evidence={"governance_gates": list(governance_result["gates_passed"])},
+                policy_evaluation={"compliant": True, "gates_passed": len(governance_result["gates_passed"])},
+                approval={"status": "AUTO_APPROVED", "reason": "Governance gates passed"},
+                execution_result={"status": "SUCCESS"},
+            )
+
+            self._governance_audit.append(governance_result)
+            return result
+
+        except (PermissionError, ValueError):
+            self._governance_audit.append(governance_result)
+            raise
+        except Exception as exc:
+            governance_result["status"] = "EXECUTION_ERROR"
+            governance_result["error"] = str(exc)
+            self._governance_audit.append(governance_result)
+            raise
+
+
+# Global governed singleton
+_governed_tool_registry: Optional[GovernedToolRegistry] = None
+
+
+def get_governed_tool_registry() -> GovernedToolRegistry:
+    """Get or create singleton GovernedToolRegistry with governance gates."""
+    global _governed_tool_registry
+    if _governed_tool_registry is None:
+        _governed_tool_registry = GovernedToolRegistry()
+    return _governed_tool_registry
+

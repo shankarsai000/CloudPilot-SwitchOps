@@ -60,6 +60,61 @@ class EmergencyStopManager:
                 return True
             return False
 
+    def trigger_stop(
+        self,
+        reason: str = "Operator engaged emergency stop",
+        initiated_by: str = "operator",
+        scope: str = "global",
+    ) -> EmergencyStopState:
+        """Alias for engage."""
+        return self.engage(scope=scope, reason=reason, activated_by=initiated_by)
+
+    def release_stop(
+        self,
+        reason: str = "Operator released emergency stop",
+        released_by: str = "operator",
+        scope: str = "global",
+    ) -> bool:
+        """Alias for release."""
+        return self.release(scope=scope)
+
+    def activate_stop(
+        self,
+        environment: Optional[str] = None,
+        service: Optional[str] = None,
+        scope: Optional[str] = None,
+        reason: str = "Operator engaged emergency stop",
+        activated_by: str = "operator",
+    ) -> EmergencyStopState:
+        """Convenience method to activate emergency stop by environment, service, or scope."""
+        if environment:
+            target_scope = f"env:{environment.strip().lower()}"
+        elif service:
+            target_scope = f"service:{service.strip().lower()}"
+        elif scope:
+            target_scope = scope
+        else:
+            target_scope = "global"
+        return self.engage(scope=target_scope, reason=reason, activated_by=activated_by)
+
+    def deactivate_stop(
+        self,
+        environment: Optional[str] = None,
+        service: Optional[str] = None,
+        scope: Optional[str] = None,
+        deactivated_by: str = "operator",
+    ) -> bool:
+        """Convenience method to deactivate emergency stop by environment, service, or scope."""
+        if environment:
+            target_scope = f"env:{environment.strip().lower()}"
+        elif service:
+            target_scope = f"service:{service.strip().lower()}"
+        elif scope:
+            target_scope = scope
+        else:
+            target_scope = "global"
+        return self.release(scope=target_scope)
+
     def is_stopped(
         self,
         environment: Optional[str] = None,

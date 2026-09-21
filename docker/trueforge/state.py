@@ -288,6 +288,101 @@ class AgentStateManager:
             matching.sort(key=lambda cp: cp.get("paused_at", ""), reverse=True)
             return matching[0]
 
+    # -------------------------------------------------------------------------
+    # Golden Path Checkpoints & Pending Approvals
+    # -------------------------------------------------------------------------
+    def save_golden_path_checkpoint(
+        self,
+        session_id: str,
+        run_id: str,
+        step_name: str,
+        step_index: int,
+        execution_state: Dict[str, Any],
+        pending_action_summary: str = "",
+        requires_approval: bool = True,
+    ) -> str:
+        """
+        Persist full golden path execution state when agent hits an approval gate.
+
+        Returns the checkpoint_id for later retrieval.
+        """
+        checkpoint_id = f"gp-ckpt-{uuid.uuid4().hex[:8]}"
+        with self._lock:
+            self._checkpoints[checkpoint_id] = {
+                "checkpoint_id": checkpoint_id,
+                "checkpoint_type": "golden_path",
+                "session_id": session_id,
+                "run_id": run_id,
+                "step_name": step_name,
+                "step_index": step_index,
+                "execution_state": execution_state,
+                "pending_action_summary": pending_action_summary,
+                "requires_approval": requires_approval,
+                "status": "WAITING_FOR_APPROVAL",
+                "paused_at": datetime.now(timezone.utc).isoformat(),
+                "resolved_at": None,
+                "resolution": None,
+                "resolver": None,
+            }
+            self._save_to_disk()
+        logger.info(
+            "Saved golden path checkpoint %s at step '%s' (run %s)",
+            checkpoint_id, step_name, run_id,
+        )
+        return checkpoint_id
+
+    def resolve_checkpoint(
+        self,
+        checkpoint_id: str,
+        approved: bool,
+        resolver: str = "human-operator",
+        reason: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Resolve a pending approval checkpoint.
+        Returns the updated checkpoint or None if not found.
+        """
+        with self._lock:
+            cp = self._checkpoints.get(checkpoint_id)
+            if not cp:
+                return None
+            cp["status"] = "APPROVED" if approved else "DENIED"
+            cp["resolution"] = "APPROVED" if approved else f"DENIED: {reason or 'No reason provided'}"
+            cp["resolver"] = resolver
+            cp["resolved_at"] = datetime.now(timezone.utc).isoformat()
+            self._save_to_disk()
+        logger.info(
+            "Checkpoint %s resolved: %s by %s",
+            checkpoint_id, cp["status"], resolver,
+        )
+        return cp
+
+    def get_pending_approvals(self) -> List[Dict[str, Any]]:
+        """
+        Return all checkpoints currently in WAITING_FOR_APPROVAL status.
+        Sorted by paused_at (oldest first for FIFO processing).
+        """
+        with self._lock:
+            pending = [
+                cp for cp in self._checkpoints.values()
+                if cp.get("status") == "WAITING_FOR_APPROVAL"
+            ]
+            pending.sort(key=lambda cp: cp.get("paused_at", ""))
+            return pending
+
+    def get_checkpoint_by_id(self, checkpoint_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a specific checkpoint by ID."""
+        with self._lock:
+            return self._checkpoints.get(checkpoint_id)
+
+    def get_checkpoints_for_run(self, run_id: str) -> List[Dict[str, Any]]:
+        """Retrieve all checkpoints for a specific golden path run."""
+        with self._lock:
+            return [
+                cp for cp in self._checkpoints.values()
+                if cp.get("run_id") == run_id
+            ]
+
 
 # Global singleton instance
 _agent_state_manager: Optional[AgentStateManager] = None
@@ -299,3 +394,4 @@ def get_agent_state_manager() -> AgentStateManager:
     if _agent_state_manager is None:
         _agent_state_manager = AgentStateManager()
     return _agent_state_manager
+

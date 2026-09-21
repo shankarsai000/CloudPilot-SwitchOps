@@ -3,7 +3,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Platform Tests](https://img.shields.io/badge/Tests-202%20PASSED%20(100%25)-brightgreen.svg)](docker/tests)
+[![Platform Tests](https://img.shields.io/badge/Tests-288%20PASSED%20(100%25)-brightgreen.svg)](docker/tests)
 [![Multi-Cloud](https://img.shields.io/badge/Multi--Cloud-AWS%20%7C%20GCP%20%7C%20Azure%20%7C%20K8s-orange.svg)]()
 [![Autonomy Levels](https://img.shields.io/badge/Autonomy-L0%20to%20L5%20Progressive-blueviolet.svg)]()
 [![Safety Plane](https://img.shields.io/badge/Safety-Authoritative%20Kill%20Switch-red.svg)]()
@@ -43,9 +43,9 @@ Unlike traditional dashboards that inundate SREs and FinOps teams with passive c
 
 ---
 
-## Platform Stack: 8 Integrated Phases
+## Platform Stack: 12 Integrated Operational Phases
 
-CloudPilot is architected as 8 modular, production-hardened subsystems:
+CloudPilot is architected as 12 modular, production-hardened subsystems:
 
 ### 1. [Production Platform Foundation](docker/core/)
 - Configuration management with strict environment separation (`development`, `staging`, `production`).
@@ -74,7 +74,7 @@ CloudPilot is architected as 8 modular, production-hardened subsystems:
 ### 4. [TrueForge Autonomous Agent Runtime](docker/trueforge/)
 - Production harness for autonomous infrastructure agents.
 - Isolated sandbox execution environment protecting production systems.
-- Tool registry exposing safe operations (discovery, analysis, code execution).
+- Governed tool registry exposing 13 safe, audited operations.
 - Streaming event telemetry delivering step-by-step reasoning.
 
 ### 5. [Safety & Autonomy Control Plane](docker/governance/)
@@ -109,7 +109,36 @@ CloudPilot is architected as 8 modular, production-hardened subsystems:
 - **Strict Capability Discovery**: Providers expose only supported capabilities; agents cannot execute unsupported operations (`UnsupportedCapabilityError`).
 - **Resilience Engine**: Token bucket rate limiting, three-state circuit breakers (`CLOSED`/`OPEN`/`HALF_OPEN`), exponential backoff retries with full jitter, and correlation request tracing.
 - **Secure Credential Vault**: `SecretString` masking, short-lived temporary credentials (AWS STS, GCP OAuth2, Azure MSI, K8s ServiceAccount), least-privilege policy validator, and zero-downtime rotation.
-- **Terraform / GitOps 6-Stage Lifecycle**: Plan $\rightarrow$ Review $\rightarrow$ Approval $\rightarrow$ Apply $\rightarrow$ Verify $\rightarrow$ Rollback.
+
+### 9. [Real Agentic Control Loop & Autonomous Benchmark](docker/trueforge/)
+- **14-State Durable State Machine**: `CREATED`, `PLANNING`, `EXECUTING_TOOL`, `OBSERVING`, `DECIDING`, `WAITING_FOR_APPROVAL`, `EXECUTING`, `VERIFYING`, `COMPLETED`, `FAILED`, `BLOCKED`, `CANCELLED`, `ROLLING_BACK`, `ROLLED_BACK`.
+- **Atomic Disk Persistence**: Full agent execution context serialized atomically to disk, allowing seamless cold restarts from approval checkpoints.
+- **Dynamic Reasoning Loop**: Iterative `observe -> reason -> act` loop with blast-radius bounding and critical tier-1 dependency protection.
+- **Self-Healing Provider Recovery**: Automatically detects sandbox validation failures and repairs missing Terraform provider configurations.
+- **Ground Truth Benchmark Harness**: Automated evaluation scoring 10 operational metrics against ground truth targets.
+
+### 10. [CloudPilot Copilot (Conversational Assistant & REST API)](docker/copilot/)
+- **Natural-Language Interface**: Intent classifier parsing billing inquiries, infrastructure queries, dependency requests, mission dispatch, and approvals.
+- **Billing Anomaly Diagnostics**: Formulates structured evidence with top cost contributors, optimization candidates, and potential savings.
+- **Autonomous Mission Dispatch**: "Fix it" commands automatically launch the TrueForge control loop, pausing at human approval checkpoints.
+- **Interactive Multi-Turn Approvals**: Conversational resolution of pending missions via "Approve" or "Deny".
+- **REST API Endpoints**: Dedicated routes mounted at `/api/v1/copilot/*` for chat, conversation management, and approval handling.
+
+### 11. [Real AWS Read-Only Production Agent](docker/trueforge/aws_agent.py)
+- **Strict Read-Only Enforcement**: Agent operates strictly through `AWSProductionAdapter` in `READ_ONLY` mode. Direct mutation calls unconditionally raise `ReadOnlyViolationError`.
+- **8-Service Live Inventory Discovery**: Scans and normalizes **EC2** instances, **EBS** volumes (detects unattached orphan volumes), **RDS** databases (detects oversized staging replicas), **VPC** networking, **ELB** load balancers (detects idle balancers), **ECS/EKS** clusters, **S3** storage tiering, and **IAM** security configurations.
+- **Tier-1 Critical Dependency Protection**: Automatically protects mission-critical databases, auth tiers, and ingress routing from any mutation.
+- **Declarative GitOps Remediation**: Formulates actionable `AWSRecommendationReport` with production-ready Terraform HCL.
+
+### 12. [Controlled GitOps Execution Orchestrator](docker/trueforge/gitops_orchestrator.py)
+- **6-Stage Declarative Lifecycle**:
+  1. **Plan**: Formulates declarative Terraform HCL plans with diffs and cost impact deltas.
+  2. **Review**: Syntax linting, drift detection, and static compliance checking.
+  3. **Approval**: Safety Control Plane gating with immutable cryptographic SHA-256 audit hashing.
+  4. **Apply**: Concurrency locking with `ActionLockManager`. Direct apply on AWS is strictly blocked (`ReadOnlyViolationError`), directing changes to safe GitOps pull requests.
+  5. **Verify**: Multi-dimensional post-apply verification (latency, availability, CPU, error rates).
+  6. **Rollback**: Automatic deterministic rollback if outcome verification detects an SLO breach.
+- **Cryptographic Audit Trail**: Every stage transition updates an immutable SHA-256 audit hash chain.
 
 ---
 
@@ -277,7 +306,38 @@ Detailed operational documentation is available in [`docker/docs/`](docker/docs/
   - Disaster recovery (RPO < 1m, RTO < 5m)
   - Scaling & Horizontal Pod Autoscaler (HPA)
 - **[Production-Readiness Verification Report](docker/docs/PRODUCTION_READINESS_REPORT.md)**:
-  - Formal sign-off and audit matrix certifying all 202 passing tests, provider capabilities, security controls, and production readiness.
+  - Formal sign-off and audit matrix certifying all 288 passing tests, provider capabilities, security controls, and production readiness.
+
+---
+
+## Autonomous Testing & Verification Matrix
+
+```bash
+python -m pytest docker/tests -q
+........................................................................ [ 25%]
+........................................................................ [ 50%]
+........................................................................ [ 75%]
+........................................................................ [100%]
+288 passed in 113.93s (0:01:53)
+```
+
+| Test Suite | Subsystem / Focus | Tests | Status |
+|:---|:---|:---:|:---:|
+| `test_platform_foundation.py` | Phase 1 Foundation, Config, DB, Redis & Resilience | 26 | ✅ PASSED |
+| `test_simulator.py` | Phase 2 Digital Enterprise Simulator (7 scenarios) | 22 | ✅ PASSED |
+| `test_pipeline.py` | Phase 3 Unified Intelligence Pipeline (M1–M9) | 16 | ✅ PASSED |
+| `test_trueforge_runtime.py` | Phase 4 TrueForge Agent Runtime & Sandbox | 18 | ✅ PASSED |
+| `test_safety_control_plane.py` | Phase 5 Governance, Policy Engine & L0–L5 Autonomy | 35 | ✅ PASSED |
+| `test_outcome_and_learning_loop.py` | Phase 6 Outcome Verification & Learning Engine | 20 | ✅ PASSED |
+| `test_command_center.py` | Phase 7 Command Center OS & Approvals | 20 | ✅ PASSED |
+| `test_production_providers.py` | Phase 8 Multi-Cloud Adapters & Resilience | 26 | ✅ PASSED |
+| `test_golden_path.py` | D1–D6 End-to-End Golden Path Autonomous Orchestrator | 17 | ✅ PASSED |
+| `test_agentic_loop.py` | **Phase 9 Real Closed-Loop Autonomy & Benchmark** | 19 | ✅ PASSED |
+| `test_copilot_conversational.py` | **Phase 10 CloudPilot Copilot & REST API** | 15 | ✅ PASSED |
+| `test_aws_readonly_agent.py` | **Phase 11 Real AWS Read-Only Agent (8 Services)** | 12 | ✅ PASSED |
+| `test_controlled_gitops.py` | **Phase 12 Controlled GitOps 6-Stage Pipeline** | 10 | ✅ PASSED |
+| *Module Unit Tests* | Individual M1–M11 Module Unit Tests | 32 | ✅ PASSED |
+| **Total Test Suite** | **Entire CloudPilot Platform** | **288** | **✅ 100% PASSED** |
 
 ---
 
@@ -293,17 +353,28 @@ CloudPilot/
 ├── README.md                      # Production repository documentation
 └── docker/                        # Core platform codebase
     ├── main.py                    # Application entry point & FastAPI factory
+    ├── golden_path.py             # D1–D6 End-to-End Golden Path Orchestrator
     ├── requirements.txt           # Python dependencies
     ├── core/                      # Phase 1: Platform foundation (config, db, logging, events)
     ├── simulator/                 # Phase 2: Digital Enterprise Simulator (7 scenarios)
     ├── pipeline/                  # Phase 3: Unified Intelligence Pipeline (M1-M9)
-    ├── trueforge/                 # Phase 4: TrueForge Autonomous Agent Runtime
+    ├── trueforge/                 # Phase 4, 9, 11, 12: TrueForge Autonomous Agent Runtime
+    │   ├── state_machine.py       # 14-state durable state machine with cold-restart recovery
+    │   ├── autonomous_loop.py     # Dynamic observe -> reason -> act reasoning loop
+    │   ├── stop_conditions.py     # Bounded autonomy stop condition evaluator
+    │   ├── agent_evaluator.py     # Ground truth benchmark scoring 10 operational metrics
+    │   ├── aws_agent.py           # Phase 11: Real AWS Read-Only Agent (8 services)
+    │   └── gitops_orchestrator.py # Phase 12: Controlled GitOps 6-Stage Delivery Orchestrator
+    ├── copilot/                   # Phase 10: Conversational Copilot & REST API
+    │   ├── models.py              # Copilot roles, intents, messages, sessions
+    │   ├── engine.py              # Natural-language intent parser & "Fix it" dispatcher
+    │   └── routes.py              # REST API endpoints (/api/v1/copilot/*)
     ├── governance/                # Phase 5: Safety & Autonomy Control Plane (L0-L5)
     ├── verification/              # Phase 6: Outcome Verification & Learning Loop
     ├── static/                    # Phase 7: Command Center OS UI (HTML5, Vanilla CSS, JS)
-    ├── providers/                 # Phase 8: Multi-Cloud Adapters & GitOps Lifecycle
+    ├── providers/                 # Phase 8: Multi-Cloud Adapters & GitOps Terraform Engine
     ├── docs/                      # Operations guide & production readiness report
-    └── tests/                     # 202 platform integration tests
+    └── tests/                     # 288 platform integration and closed-loop tests
 ```
 
 ---

@@ -288,8 +288,9 @@ class GitOpsTerraformEngine:
 
         if eval_result.requires_approval and not force_auto:
             # Human approval is required
+            req = self.safety_plane.request_approval(proposed_action, eval_result)
             record.approval_status = "PENDING_HUMAN_APPROVAL"
-            record.approval_request_id = eval_result.approval_request_id
+            record.approval_request_id = req.request_id
             record.stage_history.append({
                 "stage": GitOpsStage.APPROVAL.value,
                 "status": "PENDING_HUMAN_APPROVAL",

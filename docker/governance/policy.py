@@ -38,6 +38,25 @@ class PolicyAsCodeEngine:
         self.restricted_regions = restricted_regions or ["us-gov-west-1", "cn-north-1"]
         self.enforce_business_hours = enforce_business_hours
 
+    def evaluate(
+        self,
+        action: ProposedAction,
+        criticality: BusinessCriticality = BusinessCriticality.DEV_TEST,
+        reversibility: ReversibilityType = ReversibilityType.REVERSIBLE,
+        region: str = "us-east-1",
+        compliance_frameworks: Optional[List[str]] = None,
+        current_time: Optional[datetime] = None,
+    ) -> PolicyEvaluationReport:
+        """Alias for evaluate_policy."""
+        return self.evaluate_policy(
+            action=action,
+            criticality=criticality,
+            reversibility=reversibility,
+            region=region,
+            compliance_frameworks=compliance_frameworks,
+            current_time=current_time,
+        )
+
     def evaluate_policy(
         self,
         action: ProposedAction,

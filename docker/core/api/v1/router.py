@@ -108,5 +108,12 @@ def create_v1_router(
     except Exception as exc:
         logger.warning("Could not mount providers router: %s", exc)
 
+    # Mount CloudPilot Copilot conversational router
+    try:
+        from copilot.routes import router as copilot_router
+        v1_router.include_router(copilot_router)
+    except Exception as exc:
+        logger.warning("Could not mount copilot router: %s", exc)
+
     logger.info("Assembled API v1 router with core and module routes")
     return v1_router
