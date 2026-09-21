@@ -52,12 +52,14 @@ class TemporaryCredential:
         token_type: str,
         token: SecretString,
         access_key_id: Optional[str] = None,
+        secret_access_key: Optional[SecretString] = None,
         ttl_seconds: int = 3600,
     ) -> None:
         self.provider = provider
         self.token_type = token_type
         self.token = token
         self.access_key_id = access_key_id
+        self.secret_access_key = secret_access_key
         self.issued_at = datetime.now(timezone.utc)
         self.expires_at = self.issued_at + timedelta(seconds=ttl_seconds)
         self.renew_count = 0
@@ -93,20 +95,81 @@ class TemporaryTokenBroker:
 
     @staticmethod
     def issue_aws_sts_credentials(
-        role_arn: str = "arn:aws:iam::123456789012:role/CloudPilotReadOnly",
+        role_arn: Optional[str] = None,
         session_name: str = "CloudPilotSession",
+        external_id: Optional[str] = None,
+        region: Optional[str] = None,
         ttl_seconds: int = 3600,
     ) -> TemporaryCredential:
-        """Issue temporary AWS STS AssumeRole credentials."""
+        """
+        Issue temporary AWS STS AssumeRole credentials.
+        If real role ARN or bootstrap AWS credentials exist, performs STS AssumeRole call.
+        Falls back seamlessly to synthetic mock tokens for offline testing.
+        """
+        target_role = role_arn
+        target_region = region
+        target_external_id = external_id
+
+        # If not passed directly, look up in core settings
+        try:
+            from core.config import get_settings
+            settings = get_settings()
+            if not target_role:
+                target_role = settings.aws_role_arn
+            if not target_region:
+                target_region = settings.aws_region
+            if not target_external_id:
+                target_external_id = settings.aws_external_id
+        except Exception:
+            pass
+
+        target_region = target_region or "ap-south-1"
+
+        # Attempt live STS AssumeRole if real role ARN provided (and not the mock default ARN)
+        if target_role and not target_role.startswith("arn:aws:iam::123456789012"):
+            try:
+                import boto3
+                sts_client = boto3.client("sts", region_name=target_region)
+                assume_args: dict[str, Any] = {
+                    "RoleArn": target_role,
+                    "RoleSessionName": session_name,
+                    "DurationSeconds": min(ttl_seconds, 43200),
+                }
+                if target_external_id:
+                    assume_args["ExternalId"] = target_external_id
+
+                logger.info("Assuming AWS IAM Role %s via STS in %s", target_role, target_region)
+                resp = sts_client.assume_role(**assume_args)
+                creds = resp["Credentials"]
+                exp_seconds = int((creds["Expiration"] - datetime.now(timezone.utc)).total_seconds())
+
+                return TemporaryCredential(
+                    provider=CloudProvider.AWS,
+                    token_type="AWS_STS_ASSUME_ROLE",
+                    token=SecretString(creds["SessionToken"]),
+                    access_key_id=creds["AccessKeyId"],
+                    secret_access_key=SecretString(creds["SecretAccessKey"]),
+                    ttl_seconds=max(60, exp_seconds),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "AWS STS AssumeRole for %s failed (%s). Falling back to mock token.",
+                    target_role, exc,
+                )
+
+        # Fallback / Offline deterministic mock credentials
         mock_access_key = f"ASIA{secrets.token_hex(8).upper()}"
+        mock_secret_key = f"{secrets.token_urlsafe(32)}"
         mock_session_token = f"IQoJb3JpZ2luX2Vj{secrets.token_urlsafe(32)}"
         return TemporaryCredential(
             provider=CloudProvider.AWS,
             token_type="AWS_STS_ASSUME_ROLE",
             token=SecretString(mock_session_token),
             access_key_id=mock_access_key,
+            secret_access_key=SecretString(mock_secret_key),
             ttl_seconds=ttl_seconds,
         )
+
 
     @staticmethod
     def issue_gcp_oauth2_token(
@@ -203,14 +266,41 @@ class CredentialVault:
 
     def _init_default_vault(self) -> None:
         """Initialize vault with default baseline credentials and temporary token brokers."""
+        aws_region = "ap-south-1"
+        aws_role_arn = "arn:aws:iam::123456789012:role/CloudPilotReadOnly"
+        aws_ext_id = None
+        aws_ak = "AKIAIOSFODNN7EXAMPLE"
+        aws_sk = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+        try:
+            from core.config import get_settings
+            settings = get_settings()
+            if settings.aws_region:
+                aws_region = settings.aws_region
+            if settings.aws_role_arn:
+                aws_role_arn = settings.aws_role_arn
+            if settings.aws_external_id:
+                aws_ext_id = settings.aws_external_id
+            if settings.aws_access_key_id:
+                aws_ak = settings.aws_access_key_id.get_secret_value()
+            if settings.aws_secret_access_key:
+                aws_sk = settings.aws_secret_access_key.get_secret_value()
+        except Exception:
+            pass
+
         # AWS default (Read-Only)
-        self._temp_tokens[CloudProvider.AWS] = TemporaryTokenBroker.issue_aws_sts_credentials()
+        self._temp_tokens[CloudProvider.AWS] = TemporaryTokenBroker.issue_aws_sts_credentials(
+            role_arn=aws_role_arn,
+            region=aws_region,
+            external_id=aws_ext_id,
+        )
         self._credentials[CloudProvider.AWS] = {
             "auth_type": "STS_ASSUME_ROLE",
-            "region": "us-east-1",
-            "role_arn": "arn:aws:iam::123456789012:role/CloudPilotReadOnly",
-            "access_key": SecretString("AKIAIOSFODNN7EXAMPLE"),
-            "secret_key": SecretString("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+            "region": aws_region,
+            "role_arn": aws_role_arn,
+            "external_id": aws_ext_id,
+            "access_key": SecretString(aws_ak),
+            "secret_key": SecretString(aws_sk),
         }
 
         # GCP default
@@ -262,10 +352,52 @@ class CredentialVault:
             self._refresh_temp_token(provider)
         return self._temp_tokens.get(provider)
 
+    def get_boto3_session(self, provider: CloudProvider = CloudProvider.AWS) -> Optional[Any]:
+        """
+        Produce a configured boto3.Session using active credentials or temporary STS token.
+        Returns None if boto3 is not installed.
+        """
+        try:
+            import boto3
+        except ImportError:
+            return None
+
+        creds = self.get_credentials(provider)
+        temp_token = self.get_temporary_token(provider)
+        region = creds.get("region", "ap-south-1")
+
+        # Prefer temporary STS token if available
+        if temp_token and temp_token.secret_access_key and temp_token.access_key_id:
+            return boto3.Session(
+                aws_access_key_id=temp_token.access_key_id,
+                aws_secret_access_key=temp_token.secret_access_key.get_secret_value(),
+                aws_session_token=temp_token.token.get_secret_value(),
+                region_name=region,
+            )
+
+        ak = creds.get("access_key")
+        sk = creds.get("secret_key")
+        st = creds.get("session_token")
+        ak_val = ak.get_secret_value() if isinstance(ak, SecretString) else ak
+        sk_val = sk.get_secret_value() if isinstance(sk, SecretString) else sk
+        st_val = st.get_secret_value() if isinstance(st, SecretString) else st
+
+        return boto3.Session(
+            aws_access_key_id=ak_val,
+            aws_secret_access_key=sk_val,
+            aws_session_token=st_val,
+            region_name=region,
+        )
+
     def _refresh_temp_token(self, provider: CloudProvider) -> TemporaryCredential:
         """Internal refresh helper."""
         if provider == CloudProvider.AWS:
-            new_token = TemporaryTokenBroker.issue_aws_sts_credentials()
+            creds = self._credentials.get(CloudProvider.AWS, {})
+            new_token = TemporaryTokenBroker.issue_aws_sts_credentials(
+                role_arn=creds.get("role_arn"),
+                region=creds.get("region"),
+                external_id=creds.get("external_id"),
+            )
         elif provider == CloudProvider.GCP:
             new_token = TemporaryTokenBroker.issue_gcp_oauth2_token()
         elif provider == CloudProvider.AZURE:
@@ -281,6 +413,7 @@ class CredentialVault:
 
         self._temp_tokens[provider] = new_token
         return new_token
+
 
     def rotate_credentials(
         self,

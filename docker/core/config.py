@@ -83,6 +83,29 @@ class Settings(BaseSettings):
     # Prometheus / Metrics
     metrics_enabled: bool = Field(default=True, description="Enable metrics collection and /metrics endpoint")
 
+    # AWS Cloud Integration (Read-Only Least Privilege)
+    aws_region: str = Field(default="ap-south-1", description="Target AWS region (e.g. ap-south-1)")
+    aws_role_arn: Optional[str] = Field(
+        default=None,
+        description="Dedicated CloudPilotReadOnlyRole ARN for STS AssumeRole",
+    )
+    aws_external_id: Optional[str] = Field(
+        default=None,
+        description="External ID for IAM AssumeRole trust policy enforcement",
+    )
+    aws_access_key_id: Optional[SecretStr] = Field(
+        default=None,
+        description="Static or bootstrap AWS Access Key ID",
+    )
+    aws_secret_access_key: Optional[SecretStr] = Field(
+        default=None,
+        description="Static or bootstrap AWS Secret Access Key",
+    )
+    aws_session_token: Optional[SecretStr] = Field(
+        default=None,
+        description="Optional AWS Session Token for temporary credentials",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -123,6 +146,11 @@ class Settings(BaseSettings):
     def get_jwt_secret(self) -> str:
         """Retrieve plain JWT secret string safely."""
         return self.jwt_secret_key.get_secret_value()
+
+    @property
+    def has_live_aws_credentials(self) -> bool:
+        """Check whether real AWS credentials or IAM role ARN are configured."""
+        return bool(self.aws_role_arn or (self.aws_access_key_id and self.aws_secret_access_key))
 
 
 @lru_cache(maxsize=1)

@@ -167,250 +167,107 @@ class AWSReadOnlyAgent:
         logger.info("Discovered %d total AWS resources across 8 services", len(resources))
         return resources
 
+    def _convert_to_resource(self, item: Dict[str, Any], service: AWSServiceType) -> AWSResource:
+        """Convert normalized adapter dictionary to AWSResource model."""
+        return AWSResource(
+            resource_id=item["id"],
+            name=item["name"],
+            service=service,
+            resource_type=item.get("instance_type") or item.get("type", "standard"),
+            region=self.region or item.get("region", "us-east-1"),
+            state=item.get("state", "running"),
+            monthly_cost_usd=float(item.get("monthly_cost", 0.0)),
+            utilization_metrics=item.get("utilization_metrics", {}),
+            tags=item.get("tags", {}),
+            is_idle=item.get("is_idle", False),
+            is_oversized=item.get("is_oversized", False),
+            is_critical=item.get("is_critical", False),
+            dependencies=item.get("dependencies", []),
+            security_findings=item.get("security_findings", []),
+        )
+
     def _discover_ec2(self) -> List[AWSResource]:
-        return [
-            AWSResource(
-                resource_id="i-01a2b3c4d5e6f001",
-                name="auth-service-node-1",
-                service=AWSServiceType.EC2,
-                resource_type="t3.xlarge",
-                region=self.region,
-                state="running",
-                monthly_cost_usd=121.50,
-                utilization_metrics={"cpu_avg_pct": 8.2, "memory_avg_pct": 22.0, "network_in_mb": 45.0},
-                tags={"Environment": "production", "Tier": "auth", "Critical": "true"},
-                is_idle=False,
-                is_oversized=True,
-                is_critical=True,
-                dependencies=["rds-pg-auth-cluster", "vpc-0abc1234"],
-            ),
-            AWSResource(
-                resource_id="i-01a2b3c4d5e6f002",
-                name="analytics-batch-worker-dev",
-                service=AWSServiceType.EC2,
-                resource_type="c5.2xlarge",
-                region=self.region,
-                state="running",
-                monthly_cost_usd=248.00,
-                utilization_metrics={"cpu_avg_pct": 2.1, "memory_avg_pct": 11.5, "network_in_mb": 5.0},
-                tags={"Environment": "dev", "Team": "analytics"},
-                is_idle=True,
-                is_oversized=True,
-                is_critical=False,
-                dependencies=["s3-analytics-data-bucket"],
-            ),
-            AWSResource(
-                resource_id="i-01a2b3c4d5e6f003",
-                name="frontend-web-proxy-prod",
-                service=AWSServiceType.EC2,
-                resource_type="m5.large",
-                region=self.region,
-                state="running",
-                monthly_cost_usd=72.50,
-                utilization_metrics={"cpu_avg_pct": 65.4, "memory_avg_pct": 58.0, "network_in_mb": 180.0},
-                tags={"Environment": "production", "Tier": "web"},
-                is_idle=False,
-                is_oversized=False,
-                is_critical=True,
-                dependencies=["alb-public-ingress"],
-            ),
-        ]
+        raw = self.adapter.discover_ec2()
+        return [self._convert_to_resource(i, AWSServiceType.EC2) for i in raw]
 
     def _discover_ebs(self) -> List[AWSResource]:
-        return [
-            AWSResource(
-                resource_id="vol-0987654321fedcba1",
-                name="vol-auth-primary-data",
-                service=AWSServiceType.EBS,
-                resource_type="gp3:500GB",
-                region=self.region,
-                state="in-use",
-                monthly_cost_usd=40.00,
-                tags={"Environment": "production", "AttachedTo": "i-01a2b3c4d5e6f001"},
-                is_idle=False,
-                is_critical=True,
-            ),
-            AWSResource(
-                resource_id="vol-0987654321fedcba2",
-                name="vol-unattached-legacy-backup",
-                service=AWSServiceType.EBS,
-                resource_type="io2:1000GB",
-                region=self.region,
-                state="available",  # Unattached!
-                monthly_cost_usd=165.00,
-                tags={"Environment": "legacy", "Status": "orphan"},
-                is_idle=True,
-                is_critical=False,
-            ),
-        ]
+        raw = self.adapter.discover_ebs()
+        return [self._convert_to_resource(i, AWSServiceType.EBS) for i in raw]
 
     def _discover_rds(self) -> List[AWSResource]:
-        return [
-            AWSResource(
-                resource_id="rds-pg-auth-cluster",
-                name="production-auth-aurora-pg",
-                service=AWSServiceType.RDS,
-                resource_type="db.r6g.xlarge",
-                region=self.region,
-                state="available",
-                monthly_cost_usd=385.00,
-                utilization_metrics={"cpu_avg_pct": 14.5, "connections": 42.0},
-                tags={"Environment": "production", "Critical": "true"},
-                is_idle=False,
-                is_critical=True,
-            ),
-            AWSResource(
-                resource_id="rds-mysql-staging-replica",
-                name="staging-reporting-mysql",
-                service=AWSServiceType.RDS,
-                resource_type="db.m5.2xlarge",
-                region=self.region,
-                state="available",
-                monthly_cost_usd=480.00,
-                utilization_metrics={"cpu_avg_pct": 3.2, "connections": 1.0},
-                tags={"Environment": "staging"},
-                is_idle=True,
-                is_oversized=True,
-                is_critical=False,
-            ),
-        ]
+        raw = self.adapter.discover_rds()
+        return [self._convert_to_resource(i, AWSServiceType.RDS) for i in raw]
 
     def _discover_vpc(self) -> List[AWSResource]:
-        return [
-            AWSResource(
-                resource_id="vpc-0abc1234",
-                name="production-primary-vpc",
-                service=AWSServiceType.VPC,
-                resource_type="vpc:10.0.0.0/16",
-                region=self.region,
-                state="available",
-                monthly_cost_usd=0.00,
-                tags={"Environment": "production"},
-                is_critical=True,
-            ),
-            AWSResource(
-                resource_id="nat-0123456789abcdef0",
-                name="prod-nat-gateway-us-east-1a",
-                service=AWSServiceType.VPC,
-                resource_type="nat-gateway",
-                region=self.region,
-                state="available",
-                monthly_cost_usd=64.80,
-                tags={"Environment": "production"},
-                is_critical=True,
-            ),
-        ]
+        raw = self.adapter.discover_vpc()
+        return [self._convert_to_resource(i, AWSServiceType.VPC) for i in raw]
 
     def _discover_elb(self) -> List[AWSResource]:
-        return [
-            AWSResource(
-                resource_id="alb-public-ingress",
-                name="cloudpilot-public-alb",
-                service=AWSServiceType.ELB,
-                resource_type="application-load-balancer",
-                region=self.region,
-                state="active",
-                monthly_cost_usd=32.40,
-                tags={"Environment": "production"},
-                is_critical=True,
-            ),
-            AWSResource(
-                resource_id="nlb-idle-test-internal",
-                name="dev-test-unused-nlb",
-                service=AWSServiceType.ELB,
-                resource_type="network-load-balancer",
-                region=self.region,
-                state="active",
-                monthly_cost_usd=32.40,
-                utilization_metrics={"active_flow_count": 0.0, "processed_bytes": 0.0},
-                tags={"Environment": "dev"},
-                is_idle=True,
-                is_critical=False,
-            ),
-        ]
+        raw = self.adapter.discover_elb()
+        return [self._convert_to_resource(i, AWSServiceType.ELB) for i in raw]
 
     def _discover_ecs_eks(self) -> List[AWSResource]:
-        return [
-            AWSResource(
-                resource_id="eks-cluster-core-prod",
-                name="core-microservices-eks",
-                service=AWSServiceType.ECS_EKS,
-                resource_type="eks:v1.29",
-                region=self.region,
-                state="ACTIVE",
-                monthly_cost_usd=73.00,
-                tags={"Environment": "production"},
-                is_critical=True,
-            ),
-            AWSResource(
-                resource_id="ecs-cluster-dev-tools",
-                name="dev-tools-fargate-cluster",
-                service=AWSServiceType.ECS_EKS,
-                resource_type="ecs:fargate",
-                region=self.region,
-                state="ACTIVE",
-                monthly_cost_usd=45.00,
-                tags={"Environment": "dev"},
-                is_critical=False,
-            ),
-        ]
+        raw = self.adapter.discover_ecs_eks()
+        return [self._convert_to_resource(i, AWSServiceType.ECS_EKS) for i in raw]
 
     def _discover_s3(self) -> List[AWSResource]:
-        return [
-            AWSResource(
-                resource_id="s3-customer-assets-prod",
-                name="cloudpilot-customer-assets-prod",
-                service=AWSServiceType.S3,
-                resource_type="standard:12TB",
-                region=self.region,
-                state="active",
-                monthly_cost_usd=276.00,
-                tags={"Environment": "production", "LifecyclePolicy": "missing"},
-                is_idle=False,
-                is_oversized=True,  # Infrequently accessed data in S3 Standard
-                is_critical=True,
-            ),
-            AWSResource(
-                resource_id="s3-analytics-temp-staging",
-                name="analytics-staging-scratchpad",
-                service=AWSServiceType.S3,
-                resource_type="standard:5TB",
-                region=self.region,
-                state="active",
-                monthly_cost_usd=115.00,
-                tags={"Environment": "dev"},
-                is_idle=True,
-                is_critical=False,
-            ),
-        ]
+        raw = self.adapter.discover_s3()
+        return [self._convert_to_resource(i, AWSServiceType.S3) for i in raw]
 
     def _discover_iam(self) -> List[AWSResource]:
-        return [
-            AWSResource(
-                resource_id="iam-role-prod-workload",
-                name="CloudPilotAppExecutionRole",
-                service=AWSServiceType.IAM,
-                resource_type="iam:role",
-                region="global",
-                state="active",
-                monthly_cost_usd=0.00,
-                tags={"Environment": "production"},
-                is_critical=True,
-            ),
-            AWSResource(
-                resource_id="iam-role-dev-admin-stale",
-                name="DevTestingAdministratorOld",
-                service=AWSServiceType.IAM,
-                resource_type="iam:role",
-                region="global",
-                state="active",
-                monthly_cost_usd=0.00,
-                tags={"Environment": "dev"},
-                security_findings=["Overpermissive: AdministratorAccess attached", "Last used 180 days ago"],
-                is_idle=True,
-                is_critical=False,
-            ),
-        ]
+        raw = self.adapter.discover_iam()
+        return [self._convert_to_resource(i, AWSServiceType.IAM) for i in raw]
+
+    def simulate_iam_action(
+        self,
+        action_name: str = "ec2:ModifyInstanceAttribute",
+        resource_arn: str = "*",
+    ) -> Dict[str, Any]:
+        """
+        Evaluate whether an action would be permitted under IAM without mutating AWS.
+        Uses AWS IAM Policy Simulator if live session is available, or deterministic least-privilege evaluation.
+        """
+        session = self.adapter._get_boto3_session()
+        creds = self.adapter.vault.get_credentials(self.adapter.provider)
+        role_arn = creds.get("role_arn", f"arn:aws:iam::{self.account_id}:role/CloudPilotReadOnlyRole")
+
+        if session and self.adapter._has_live_credentials():
+            try:
+                iam = session.client("iam")
+                resp = iam.simulate_principal_policy(
+                    PolicySourceArn=role_arn,
+                    ActionNames=[action_name],
+                    ResourceArns=[resource_arn],
+                )
+                eval_results = resp.get("EvaluationResults", [])
+                if eval_results:
+                    eval_dec = eval_results[0].get("EvalDecision", "explicitDeny")
+                    return {
+                        "action": action_name,
+                        "resource_arn": resource_arn,
+                        "role_arn": role_arn,
+                        "allowed": eval_dec == "allowed",
+                        "eval_decision": eval_dec,
+                        "simulator_type": "AWS_LIVE_POLICY_SIMULATOR",
+                        "evaluated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+            except Exception as exc:
+                logger.warning("AWS IAM Policy Simulator call failed (%s). Using local safety evaluator.", exc)
+
+        # Local policy simulator:
+        # Read/List/Describe actions are allowed under CloudPilotReadOnlyRole.
+        # Mutating actions (terminate, stop, modify, create, delete) are strictly denied.
+        is_write = any(w in action_name.lower() for w in ["terminate", "delete", "stop", "modify", "create", "put", "update", "patch"])
+        return {
+            "action": action_name,
+            "resource_arn": resource_arn,
+            "role_arn": role_arn,
+            "allowed": not is_write,
+            "eval_decision": "allowed" if not is_write else "implicitDeny",
+            "simulator_type": "CLOUDPILOT_LEAST_PRIVILEGE_SIMULATOR",
+            "reason": "Allowed by Read-Only policy" if not is_write else "Denied: CloudPilotReadOnlyRole does not grant mutating actions",
+            "evaluated_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     # -------------------------------------------------------------------------
     # Analysis & Recommendation Generation

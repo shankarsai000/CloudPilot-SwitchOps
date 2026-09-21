@@ -15,9 +15,11 @@ Verifies:
 from __future__ import annotations
 
 import pytest
+from fastapi.testclient import TestClient
 
+from main import app
 from providers.aws import AWSProductionAdapter
-from providers.credentials import CredentialVault
+from providers.credentials import CredentialVault, TemporaryTokenBroker
 from providers.models import (
     CloudProvider,
     HealthStatus,
@@ -162,3 +164,139 @@ class TestAWSRecommendationEngine:
             assert len(cand.gitops_remediation_hcl) > 10
             # Blast radius score must be safe (< 0.5)
             assert cand.blast_radius_score <= 0.3
+
+
+class TestAWSLiveAdapterAndCredentials:
+    """Tests AWS Boto3 adapter discovery and STS AssumeRole token broker."""
+
+    def test_sts_token_broker_issuance_and_masking(self) -> None:
+        token = TemporaryTokenBroker.issue_aws_sts_credentials()
+        assert token.provider == CloudProvider.AWS
+        assert token.token_type == "AWS_STS_ASSUME_ROLE"
+        assert token.access_key_id is not None
+        assert token.access_key_id.startswith("ASIA")
+        assert token.secret_access_key is not None
+        # String representation must mask secrets
+        assert str(token.token) == "***MASKED_SECRET***"
+        assert str(token.secret_access_key) == "***MASKED_SECRET***"
+        assert token.is_expired is False
+
+    def test_vault_boto3_session_creation(self, credential_vault: CredentialVault) -> None:
+        session = credential_vault.get_boto3_session(CloudProvider.AWS)
+        assert session is not None
+        assert session.region_name is not None
+
+    def test_adapter_all_8_service_discovery_methods(self, aws_adapter: AWSProductionAdapter) -> None:
+        ec2 = aws_adapter.discover_ec2()
+        assert len(ec2) >= 3
+        ebs = aws_adapter.discover_ebs()
+        assert len(ebs) >= 2
+        rds = aws_adapter.discover_rds()
+        assert len(rds) >= 2
+        vpc = aws_adapter.discover_vpc()
+        assert len(vpc) >= 2
+        elb = aws_adapter.discover_elb()
+        assert len(elb) >= 2
+        ecs_eks = aws_adapter.discover_ecs_eks()
+        assert len(ecs_eks) >= 2
+        s3 = aws_adapter.discover_s3()
+        assert len(s3) >= 2
+        iam = aws_adapter.discover_iam()
+        assert len(iam) >= 2
+
+        all_svcs = aws_adapter.discover_all_services()
+        assert set(all_svcs.keys()) == {"EC2", "EBS", "RDS", "VPC", "ELB", "ECS_EKS", "S3", "IAM"}
+
+        flattened = aws_adapter.discover_resources()
+        assert len(flattened) >= 17
+
+
+class TestAWSIAMPolicySimulation:
+    """Tests IAM policy simulation for read-only vs mutating actions."""
+
+    def test_simulate_iam_action_read_allowed(self, aws_agent: AWSReadOnlyAgent) -> None:
+        result = aws_agent.simulate_iam_action(action_name="ec2:DescribeInstances", resource_arn="*")
+        assert result["allowed"] is True
+        assert result["eval_decision"] == "allowed"
+
+    def test_simulate_iam_action_write_denied(self, aws_agent: AWSReadOnlyAgent) -> None:
+        result = aws_agent.simulate_iam_action(
+            action_name="ec2:TerminateInstances",
+            resource_arn="arn:aws:ec2:ap-south-1:123456789012:instance/i-01a2b3c4d5e6f001",
+        )
+        assert result["allowed"] is False
+        assert "Deny" in result["eval_decision"]
+
+
+class TestAWSAgentAPIRoutes:
+    """Tests FastAPI REST endpoints for AWS Read-Only Agent under /api/v1/providers/aws/agent."""
+
+    @pytest.fixture
+    def client(self) -> TestClient:
+        return TestClient(app)
+
+    def test_api_discover_endpoint(self, client: TestClient) -> None:
+        response = client.post("/api/v1/providers/aws/agent/discover", json={"region": "ap-south-1"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["provider"] == "aws"
+        assert data["mode"] == "READ_ONLY"
+        assert data["total_resources"] >= 12
+        assert "EC2" in data["service_breakdown"]
+        assert "IAM" in data["service_breakdown"]
+
+    def test_api_analyze_endpoint(self, client: TestClient) -> None:
+        response = client.post("/api/v1/providers/aws/agent/analyze", json={})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["agent_mode"] == "READ_ONLY"
+        assert data["total_monthly_spend_usd"] > 0
+        assert data["total_potential_monthly_savings_usd"] > 0
+        assert len(data["candidates"]) >= 4
+
+    def test_api_mutation_safety_block_endpoint(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/v1/providers/aws/agent/mutate",
+            json={
+                "resource_id": "i-01a2b3c4d5e6f001",
+                "action": "terminate_instance",
+                "parameters": {},
+            },
+        )
+        # MUST return 403 Forbidden with ReadOnlyViolationError
+        assert response.status_code == 403
+        data = response.json()
+        error_content = str(data)
+        assert "ReadOnlyViolationError" in error_content
+        assert "strictly in READ_ONLY mode" in error_content
+        assert "CloudPilot strictly forbids direct AWS mutations" in error_content
+
+    def test_api_simulate_iam_endpoint(self, client: TestClient) -> None:
+        # Read action
+        resp_read = client.post(
+            "/api/v1/providers/aws/agent/simulate-iam",
+            json={"action": "ec2:DescribeInstances", "resource_arn": "*"},
+        )
+        assert resp_read.status_code == 200
+        assert resp_read.json()["allowed"] is True
+
+        # Mutating action
+        resp_write = client.post(
+            "/api/v1/providers/aws/agent/simulate-iam",
+            json={"action": "ec2:StopInstances", "resource_arn": "arn:aws:ec2:*:*:instance/*"},
+        )
+        assert resp_write.status_code == 200
+        assert resp_write.json()["allowed"] is False
+
+    def test_api_pipeline_endpoint(self, client: TestClient) -> None:
+        response = client.post("/api/v1/providers/aws/agent/pipeline", json={"region": "ap-south-1"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["mode"] == "READ_ONLY"
+        assert "pipeline_stages" in data
+        stages = data["pipeline_stages"]
+        assert stages["m1_discovery"]["status"] == "COMPLETED"
+        assert stages["m2_cost_analysis"]["status"] == "COMPLETED"
+        assert stages["m6_digital_twin_simulation"]["status"] == "COMPLETED"
+        assert stages["m9_decision"]["status"] == "GATED_APPROVAL_REQUIRED"
+
