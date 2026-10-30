@@ -34,6 +34,11 @@ from app.api.tasks import (
 from app.api.tasks import (
     router as tasks_router,
 )
+from app.api.assessments import (
+    get_repository as assessments_get_repo,
+    get_task_service as assessments_get_service,
+    router as assessments_router,
+)
 from app.core.config import Settings, get_settings
 from app.core.errors import CloudPilotError
 from app.core.logging import (
@@ -82,7 +87,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Initializing CloudPilot SwitchOps v%s...", settings.app_version)
 
     # 1. Initialize SQLite persistence
-    _repository = SQLiteTaskRepository(db_path=settings.database_url)
+    db_path = settings.database_url
+    if db_path.startswith("sqlite:///"):
+        db_path = db_path.replace("sqlite:///", "")
+    _repository = SQLiteTaskRepository(db_path=db_path)
 
     # 2. Initialize Switch adapter
     # If explicitly running in testing or mock mode, use EmulatedSwitchBridge
@@ -105,6 +113,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.dependency_overrides[health_get_repo] = get_repository
     app.dependency_overrides[health_get_adapter] = get_switch_adapter
     app.dependency_overrides[tasks_get_service] = get_task_service
+    app.dependency_overrides[assessments_get_repo] = get_repository
+    app.dependency_overrides[assessments_get_service] = get_task_service
 
     # 5. Start background listener if live Switch connection is available
     if isinstance(_switch_adapter, SwitchWireClient) and settings.switch_agent_api_key:
@@ -177,6 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Mount API routers
     app.include_router(health_router)
     app.include_router(tasks_router)
+    app.include_router(assessments_router)
 
     return app
 

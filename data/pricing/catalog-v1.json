@@ -1,0 +1,162 @@
+{
+  "catalog_version": "1.0",
+  "effective_date": "2026-01-01",
+  "currency": "USD",
+  "provenance": {
+    "source": "CloudPilot SwitchOps Standard Demonstration Pricing Benchmark",
+    "description": "Transparent reference pricing catalog for deterministic FinOps baseline estimation.",
+    "standard_monthly_hours": 730
+  },
+  "rates": [
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_instance:t3.nano",
+      "resource_type": "compute",
+      "pricing_unit": "hour",
+      "unit_price": "0.0052",
+      "currency": "USD",
+      "description": "AWS EC2 t3.nano Linux on-demand instance"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_instance:t3.micro",
+      "resource_type": "compute",
+      "pricing_unit": "hour",
+      "unit_price": "0.0104",
+      "currency": "USD",
+      "description": "AWS EC2 t3.micro Linux on-demand instance"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_instance:t3.small",
+      "resource_type": "compute",
+      "pricing_unit": "hour",
+      "unit_price": "0.0208",
+      "currency": "USD",
+      "description": "AWS EC2 t3.small Linux on-demand instance"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_instance:t3.medium",
+      "resource_type": "compute",
+      "pricing_unit": "hour",
+      "unit_price": "0.0416",
+      "currency": "USD",
+      "description": "AWS EC2 t3.medium Linux on-demand instance"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_instance:m5.large",
+      "resource_type": "compute",
+      "pricing_unit": "hour",
+      "unit_price": "0.0960",
+      "currency": "USD",
+      "description": "AWS EC2 m5.large Linux on-demand instance"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_instance:c5.xlarge",
+      "resource_type": "compute",
+      "pricing_unit": "hour",
+      "unit_price": "0.1700",
+      "currency": "USD",
+      "description": "AWS EC2 c5.xlarge Linux on-demand instance"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_ebs_volume:gp3",
+      "resource_type": "storage",
+      "pricing_unit": "gb-month",
+      "unit_price": "0.0800",
+      "currency": "USD",
+      "description": "AWS EBS General Purpose SSD (gp3) baseline storage"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_ebs_volume:io2",
+      "resource_type": "storage",
+      "pricing_unit": "gb-month",
+      "unit_price": "0.1250",
+      "currency": "USD",
+      "description": "AWS EBS Provisioned IOPS SSD (io2) storage"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_db_instance:db.t3.micro",
+      "resource_type": "database",
+      "pricing_unit": "hour",
+      "unit_price": "0.0170",
+      "currency": "USD",
+      "description": "AWS RDS db.t3.micro Single-AZ MySQL/PostgreSQL"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_db_instance:db.t3.medium",
+      "resource_type": "database",
+      "pricing_unit": "hour",
+      "unit_price": "0.0680",
+      "currency": "USD",
+      "description": "AWS RDS db.t3.medium Single-AZ MySQL/PostgreSQL"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_db_instance:db.m5.large",
+      "resource_type": "database",
+      "pricing_unit": "hour",
+      "unit_price": "0.1360",
+      "currency": "USD",
+      "description": "AWS RDS db.m5.large Single-AZ MySQL/PostgreSQL"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_s3_bucket:standard",
+      "resource_type": "storage",
+      "pricing_unit": "gb-month",
+      "unit_price": "0.0230",
+      "currency": "USD",
+      "description": "AWS S3 Standard Storage first 50 TB/month"
+    },
+    {
+      "provider": "aws",
+      "region": "us-east-1",
+      "sku": "aws_lb:application",
+      "resource_type": "network",
+      "pricing_unit": "hour",
+      "unit_price": "0.0225",
+      "currency": "USD",
+      "description": "AWS Application Load Balancer (ALB) base hourly charge"
+    },
+    {
+      "provider": "docker",
+      "region": "local",
+      "sku": "compose_service:compute_small",
+      "resource_type": "container",
+      "pricing_unit": "hour",
+      "unit_price": "0.0150",
+      "currency": "USD",
+      "description": "Container allocation (<= 1 vCPU, <= 2GB RAM equivalent)"
+    },
+    {
+      "provider": "docker",
+      "region": "local",
+      "sku": "compose_service:compute_medium",
+      "resource_type": "container",
+      "pricing_unit": "hour",
+      "unit_price": "0.0350",
+      "currency": "USD",
+      "description": "Container allocation (2 vCPU, 4GB RAM equivalent)"
+    }
+  ]
+}

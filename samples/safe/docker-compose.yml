@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # Hardened Redis cache: bound strictly to localhost, healthcheck enabled, memory limits set
+  redis:
+    image: redis:7.0-alpine
+    container_name: safe-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - redis_safe_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # Hardened Web Service
+  web:
+    image: nginx:alpine
+    container_name: safe-web
+    ports:
+      - "127.0.0.1:8080:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+volumes:
+  redis_safe_data:

@@ -63,6 +63,21 @@ class TaskNotFoundError(CloudPilotError):
         )
 
 
+class NotFoundError(CloudPilotError):
+    """Raised when a requested resource is not found."""
+
+    def __init__(self, message: str, resource_type: str = "resource", resource_id: str | None = None) -> None:
+        details = {"resource_type": resource_type}
+        if resource_id:
+            details["resource_id"] = resource_id
+        super().__init__(
+            message=message,
+            code="NOT_FOUND",
+            status_code=404,
+            details=details,
+        )
+
+
 class TaskConflictError(CloudPilotError):
     """Raised when a task with the given ID already exists."""
 

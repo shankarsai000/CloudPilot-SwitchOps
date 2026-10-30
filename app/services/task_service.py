@@ -2,23 +2,31 @@
 CloudPilot SwitchOps — Task Lifecycle & Switch Orchestration Service
 
 Orchestrates task receipt from Switch rooms, validates state transitions,
-appends audit events, and truthfully communicates status back to Switch rooms.
+executes infrastructure discovery, coordinates specialist agents (FinOps, SecOps),
+appends immutable audit events, and truthfully communicates status back to Switch rooms.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+import re
 import uuid
-from typing import Any
+from typing import Any, List, Optional
 
-from app.core.errors import (
-    TaskNotFoundError,
-)
+from app.core.errors import TaskNotFoundError
 from app.core.logging import (
     get_logger,
     redact_secrets,
     set_correlation_id,
     set_task_id,
 )
+from app.domain.finding import (
+    AssessmentSummary,
+    Finding,
+    FindingCategory,
+    FindingSeverity,
+)
+from app.domain.inventory import InfrastructureInventory
 from app.domain.models import (
     ActorType,
     Evidence,
@@ -29,6 +37,9 @@ from app.domain.models import (
 )
 from app.integrations.switch.client import SwitchAdapterInterface
 from app.persistence.repository import TaskRepositoryInterface
+from app.services.discovery.engine import InfrastructureDiscoveryEngine
+from app.services.specialists.finops_specialist import FinOpsSpecialist
+from app.services.specialists.secops_specialist import SecOpsSpecialist
 
 logger = get_logger("cloudpilot.services.task")
 
@@ -43,9 +54,15 @@ class TaskService:
         self,
         repository: TaskRepositoryInterface,
         switch_adapter: SwitchAdapterInterface,
+        discovery_engine: Optional[InfrastructureDiscoveryEngine] = None,
+        finops_specialist: Optional[FinOpsSpecialist] = None,
+        secops_specialist: Optional[SecOpsSpecialist] = None,
     ) -> None:
         self.repository = repository
         self.switch_adapter = switch_adapter
+        self.discovery_engine = discovery_engine or InfrastructureDiscoveryEngine()
+        self.finops_specialist = finops_specialist or FinOpsSpecialist()
+        self.secops_specialist = secops_specialist or SecOpsSpecialist()
 
     async def handle_switch_event(self, frame: dict[str, Any]) -> Task | None:
         """
@@ -80,12 +97,20 @@ class TaskService:
             redact_secrets(body),
         )
 
+        # Detect if task is an explicit assessment command (e.g. "@cloudpilot-ops-agent assess ./samples/staging ...")
+        is_assessment = bool(
+            re.search(r"assess\s+(?:\./|[a-zA-Z0-9_\-\.\/]+)", body, re.IGNORECASE)
+            or (frame.get("metadata") and "workspace_root" in frame["metadata"])
+        )
+        task_type = "infrastructure_assessment" if is_assessment else "infrastructure_review"
+
         return await self.process_task_request(
             title=f"Task from {sender_name}: {body[:40]}...",
             description=body,
             room_id=room_id,
             requested_by=sender,
             correlation_id=correlation_id,
+            task_type=task_type,
             metadata={"origin_message_id": message_id, "sender_name": sender_name},
         )
 
@@ -100,16 +125,7 @@ class TaskService:
         metadata: dict[str, Any] | None = None,
     ) -> Task:
         """
-        Execute the full required Phase 1 task workflow:
-        1. Create Task in RECEIVED state and persist.
-        2. Append TASK_RECEIVED event.
-        3. Transition to ACKNOWLEDGED state and persist.
-        4. Append TASK_ACKNOWLEDGED event and post acknowledgment in Switch room.
-        5. Transition to IN_PROGRESS state and persist.
-        6. Append TASK_STARTED event.
-        7. Execute truthful review logic (Phase 1 engineering baseline).
-        8. Transition to COMPLETED state and persist.
-        9. Append TASK_COMPLETED event and post truthful outcome report to Switch room.
+        Execute task workflow through truth-preserving state transitions.
         """
         cid = correlation_id or f"corr-{uuid.uuid4().hex[:12]}"
         set_correlation_id(cid)
@@ -179,14 +195,48 @@ class TaskService:
                 )
             )
 
-            # 4. Perform truthful assessment logic (Phase 1 Engineering Foundation)
-            # In Phase 1: Live discovery is out of scope. Report truthful status without fabrication.
-            execution_summary = (
-                "CloudPilot SwitchOps Phase 1 Foundation Verified.\n"
-                "- Read-only policy enforced: zero modifications made to files or infrastructure.\n"
-                "- Live multi-cloud discovery & FinOps/SecOps intelligence engines will be integrated in Phase 2.\n"
-                "- Switch collaboration bridge and task audit trail are verified active."
-            )
+            # Check if this task targets infrastructure assessment
+            workspace_path = self._extract_workspace_path(description, metadata)
+
+            if workspace_path or task_type == "infrastructure_assessment":
+                # Execute Phase 2 Intelligence Assessment Workflow
+                target_dir = workspace_path or "samples/staging"
+                assessment = await self._execute_assessment_workflow(
+                    task=task,
+                    workspace_dir=target_dir,
+                    room_id=room_id,
+                    correlation_id=cid,
+                )
+                execution_summary = (
+                    f"CloudPilot SwitchOps Phase 2 Assessment Completed for `{target_dir}`.\n"
+                    f"- Resources Discovered: {assessment.total_resources}\n"
+                    f"- Estimated Monthly Baseline: ${assessment.estimated_monthly_cost} {assessment.currency}\n"
+                    f"- Total Findings: {assessment.total_findings} "
+                    f"({assessment.critical_findings_count} critical, {assessment.high_findings_count} high)\n"
+                    f"- Read-only policy strictly enforced: zero modifications made to files or infrastructure."
+                )
+            else:
+                # Phase 1 Engineering Foundation baseline execution
+                execution_summary = (
+                    "CloudPilot SwitchOps Phase 1 Foundation Verified.\n"
+                    "- Read-only policy enforced: zero modifications made to files or infrastructure.\n"
+                    "- Live multi-cloud discovery & FinOps/SecOps intelligence engines available in Phase 2.\n"
+                    "- Switch collaboration bridge and task audit trail are verified active."
+                )
+
+                # 6. Post final result report in Switch room
+                report_message = (
+                    f"### [CloudPilot SwitchOps] Task Execution Report\n"
+                    f"- **Task ID**: `{task.task_id}`\n"
+                    f"- **Status**: `COMPLETED`\n"
+                    f"- **Requested by**: {task.requested_by}\n"
+                    f"- **Room**: `{task.room_id}`\n"
+                    f"- **Correlation ID**: `{cid}`\n\n"
+                    f"**Assessment Outcome:**\n"
+                    f"{execution_summary}\n\n"
+                    f"*Audit trail persisted with {len(self.repository.get_events_for_task(task.task_id))} events.*"
+                )
+                await self._safe_post_switch_message(room_id, report_message)
 
             # 5. Transition to COMPLETED
             task.transition_to(TaskStatus.COMPLETED)
@@ -203,19 +253,6 @@ class TaskService:
                 )
             )
 
-            # 6. Post final result report in Switch room
-            report_message = (
-                f"### [CloudPilot SwitchOps] Task Execution Report\n"
-                f"- **Task ID**: `{task.task_id}`\n"
-                f"- **Status**: `COMPLETED`\n"
-                f"- **Requested by**: {task.requested_by}\n"
-                f"- **Room**: `{task.room_id}`\n"
-                f"- **Correlation ID**: `{cid}`\n\n"
-                f"**Assessment Outcome:**\n"
-                f"{execution_summary}\n\n"
-                f"*Audit trail persisted with {len(self.repository.get_events_for_task(task.task_id))} events.*"
-            )
-            await self._safe_post_switch_message(room_id, report_message)
             logger.info("Task %s completed successfully", task.task_id)
             return task
 
@@ -241,6 +278,131 @@ class TaskService:
                 )
                 await self._safe_post_switch_message(room_id, err_msg)
             raise
+
+    async def _execute_assessment_workflow(
+        self,
+        task: Task,
+        workspace_dir: str,
+        room_id: str,
+        correlation_id: str,
+    ) -> AssessmentSummary:
+        """
+        Coordinates full multi-specialist investigation across Discovery, FinOps, and SecOps.
+        """
+        # Step A: Announce discovery start in room
+        start_msg = (
+            f"🔍 **Starting Infrastructure Discovery**\n"
+            f"- **Target Workspace**: `{workspace_dir}`\n"
+            f"- **Mode**: Read-only assessment (zero modifications)\n"
+            f"Scanning for Terraform (`*.tf`) and Docker Compose definitions..."
+        )
+        await self._safe_post_switch_message(room_id, start_msg)
+
+        # Step B: Run Discovery Engine
+        inventory = self.discovery_engine.discover(
+            workspace_root=workspace_dir,
+            task_id=task.task_id,
+        )
+        self.repository.save_inventory(inventory)
+
+        disc_msg = (
+            f"📦 **Infrastructure Discovery Completed**\n"
+            f"- **Discovered Files**: {len(inventory.discovered_files)} (`{', '.join(Path(f).name for f in inventory.discovered_files)}`)\n"
+            f"- **Total Resources**: {inventory.total_resources}\n"
+            f"- **Scan Duration**: {inventory.discovery_duration_ms:.1f}ms\n"
+            f"Dispatching specialist agents: `finops-specialist`, `secops-specialist`..."
+        )
+        await self._safe_post_switch_message(room_id, disc_msg)
+
+        # Step C: FinOps Specialist evaluation
+        finops_res = self.finops_specialist.analyze(inventory=inventory, task_id=task.task_id)
+        for f in finops_res.findings:
+            self.repository.save_finding(f)
+
+        finops_switch_msg = self.finops_specialist.format_switch_message(finops_res)
+        await self._safe_post_switch_message(room_id, finops_switch_msg)
+
+        # Step D: SecOps Specialist evaluation
+        secops_res = self.secops_specialist.analyze(inventory=inventory, task_id=task.task_id)
+        for f in secops_res.all_findings:
+            self.repository.save_finding(f)
+
+        secops_switch_msg = self.secops_specialist.format_switch_message(secops_res)
+        await self._safe_post_switch_message(room_id, secops_switch_msg)
+
+        # Step E: Compile Assessment Summary
+        all_findings = finops_res.findings + secops_res.all_findings
+        crit = sum(1 for f in all_findings if f.severity == FindingSeverity.CRITICAL)
+        high = sum(1 for f in all_findings if f.severity == FindingSeverity.HIGH)
+        med = sum(1 for f in all_findings if f.severity == FindingSeverity.MEDIUM)
+        low = sum(1 for f in all_findings if f.severity == FindingSeverity.LOW)
+
+        next_recommendations = [
+            "Evaluate Phase 3 Pareto optimization to balance compute instance downscaling against SLA targets.",
+            "Formulate bounded remediation plan for exposed ports and unrestricted security group ingress.",
+            "Implement off-hours shutdown schedule on non-production database resources to capture up to 65% savings.",
+        ]
+
+        assessment = AssessmentSummary(
+            task_id=task.task_id,
+            workspace_root=workspace_dir,
+            total_resources=inventory.total_resources,
+            total_findings=len(all_findings),
+            critical_findings_count=crit,
+            high_findings_count=high,
+            medium_findings_count=med,
+            low_findings_count=low,
+            estimated_monthly_cost=finops_res.total_monthly_cost,
+            currency=finops_res.currency,
+            finops_summary=finops_res.summary_text,
+            secops_summary=secops_res.security_summary,
+            reliability_summary=secops_res.reliability_summary,
+            next_phase_recommendations=next_recommendations,
+            status="COMPLETED",
+        )
+        self.repository.save_assessment(assessment)
+
+        # Step F: Publish final consolidated report in Switch room
+        consolidated_report = (
+            f"## 📊 [CloudPilot SwitchOps] Task Execution Report — Consolidated Assessment\n"
+            f"- **Task ID**: `{task.task_id}` | **Status**: `COMPLETED`\n"
+            f"- **Target Workspace**: `{workspace_dir}`\n"
+            f"- **Total Discovered Resources**: {inventory.total_resources}\n\n"
+            f"### 1. FinOps Baseline\n"
+            f"- **Estimated Monthly Baseline**: **${assessment.estimated_monthly_cost} {assessment.currency}**\n"
+            f"- {finops_res.summary_text}\n\n"
+            f"### 2. SecOps & Reliability Posture\n"
+            f"- **Total Findings**: {assessment.total_findings} "
+            f"({crit} Critical, {high} High, {med} Medium, {low} Low)\n"
+            f"- {secops_res.security_summary}\n"
+            f"- {secops_res.reliability_summary}\n\n"
+            f"### 3. Next Phase Investigation Scope\n"
+            + "\n".join(f"- {rec}" for rec in next_recommendations)
+            + f"\n\n*All {len(all_findings)} finding(s) persisted with reproducible evidence records.*"
+        )
+        await self._safe_post_switch_message(room_id, consolidated_report)
+
+        return assessment
+
+    def _extract_workspace_path(self, text: str, metadata: dict[str, Any] | None) -> str:
+        """Extract workspace path from metadata or explicit path command if it exists."""
+        candidate = ""
+        if metadata and "workspace_root" in metadata:
+            candidate = str(metadata["workspace_root"])
+        else:
+            # Check for explicit paths like ./samples/staging or samples/safe
+            path_match = re.search(r"(\./[^\s,]+|samples/[^\s,]+)", text)
+            if path_match:
+                candidate = path_match.group(1).rstrip(".,;'\"")
+            # Or explicit assess command targeting staging or safe (e.g. "@cloudpilot assess staging")
+            elif re.search(r"\bassess\s+(?:the\s+)?(staging|safe)", text, re.IGNORECASE):
+                sub = "staging" if "staging" in text.lower() else "safe"
+                candidate = f"samples/{sub}"
+
+        if candidate and Path(candidate).exists() and Path(candidate).is_dir():
+            return candidate
+
+        return ""
 
     async def _safe_post_switch_message(self, room_id: str, content: str) -> None:
         """Post a message to the Switch room, logging errors if connection is degraded."""
@@ -272,7 +434,6 @@ class TaskService:
 
     def get_task_events(self, task_id: str) -> list[TaskEvent]:
         """Retrieve chronological event history for a task."""
-        # Ensure task exists
         self.get_task(task_id)
         return self.repository.get_events_for_task(task_id)
 

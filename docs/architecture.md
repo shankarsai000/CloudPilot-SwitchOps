@@ -1,46 +1,63 @@
-# CloudPilot SwitchOps — Phase 1 System Architecture
+# CloudPilot SwitchOps — System Architecture
 
 ## 1. Executive Summary
 
-**CloudPilot SwitchOps** is a Switch-native cloud engineering control room designed for the **Flip the Switch Hackathon (Track 01: Best Business Workflow)**. It allows human operators and autonomous AI agents to collaborate within a shared team-chat room to investigate infrastructure, evaluate trade-offs, approve specific modifications, execute bounded actions, and verify outcomes.
+**CloudPilot SwitchOps** is a Switch-native cloud engineering control room designed for the **Flip the Switch Hackathon (Track 01: Best Business Workflow)**. It allows human operators and autonomous AI agents to collaborate within a shared team-chat room to investigate infrastructure, evaluate cost/security/reliability trade-offs, approve specific modifications, execute bounded actions, and verify outcomes.
 
-In this architecture, **Switch provides the central collaboration infrastructure**. Switch is not a cosmetic notification sink; without Switch, the collaborative workflow between human and agent does not exist.
+In this architecture, **Switch provides the central collaboration infrastructure**. Switch is not a cosmetic notification sink; the entire operational lifecycle originates in the Switch room and reports progress continuously back to human engineers.
 
 ---
 
-## 2. Architecture Diagram
+## 2. Phase 2 Architecture Diagram
 
 ```mermaid
 flowchart TD
     subgraph HumanCollaboration ["Switch Shared Collaboration Surface"]
         Human["Human Operator / Platform Engineer\n(@operator:switch)"]
         Room["Switch Room: cloudpilot-ops\n(Mattermost / Slack / Discord / Console)"]
-        Human <-->|Chat / Commands| Room
+        Human <-->|Chat / Commands: @cloudpilot-ops-agent assess ./samples/staging| Room
     end
 
     subgraph SwitchCore ["Switch Infrastructure"]
         Bridge["Switch Agent Bridge / Gateway\n(WebSocket + HTTP REST)"]
-        Room <-->|Event Buffer & Delivery| Bridge
+        Room <-->|Event Buffer & Real-time Delivery| Bridge
     end
 
     subgraph CloudPilotBackend ["CloudPilot SwitchOps Backend (Modular Monolith)"]
         Adapter["Switch Adapter Boundary\napp/integrations/switch\n(SwitchWireClient / EmulatedBridge)"]
-        Service["Task Lifecycle & Orchestration\napp/services/TaskService"]
-        Domain["Domain Contracts & Transition Policy\napp/domain\n(Task, TaskEvent, Evidence)"]
+        Service["Task Lifecycle & Switch Coordinator\napp/services/TaskService"]
+        
+        subgraph IntelligenceEngines ["Phase 2 Cloud Intelligence Engines"]
+            Discovery["Infrastructure Discovery Engine\napp/services/discovery\n(TerraformParser, ComposeParser)"]
+            FinOps["FinOps Intelligence Engine\napp/services/finops\n(PricingCatalog, FinOpsEngine)"]
+            SecOps["SecOps & SRE Engine\napp/services/secops\n(Rules SEC-001..010, REL-001..005)"]
+            
+            FinOpsAgent["FinOps Specialist Agent\napp/services/specialists/FinOpsSpecialist"]
+            SecOpsAgent["SecOps Specialist Agent\napp/services/specialists/SecOpsSpecialist"]
+        end
+
+        Domain["Domain Contracts & State Machine\napp/domain\n(Task, Inventory, Finding, AssessmentSummary)"]
         Persistence["Persistence Layer\napp/persistence\n(SQLiteTaskRepository)"]
-        API["HTTP API & Health Probes\napp/api\n(/health/live, /health/ready, /api/v1/tasks)"]
+        API["HTTP API Endpoints\napp/api\n(/health/*, /api/v1/tasks, /api/v1/assessments)"]
 
         Bridge <-->|WebSocket: Events & Pings (<=2s)\nHTTP: Outbound /message| Adapter
         Adapter <-->|Addressed Message Events| Service
-        Service -->|Enforces Transitions| Domain
-        Service -->|Append-Only Events & Metadata| Persistence
-        API -->|Read Probes & State| Persistence
-        API -->|Readiness Probe| Adapter
+        Service -->|Coordinates| Discovery
+        Discovery -->|Discovered Inventory| Service
+        Service -->|Dispatches| FinOpsAgent
+        Service -->|Dispatches| SecOpsAgent
+        FinOpsAgent --> FinOps
+        SecOpsAgent --> SecOps
+        Service -->|Saves State & Findings| Persistence
+        Persistence --> Domain
+        API --> Persistence
     end
 
     subgraph Storage ["CloudPilot Data Layer"]
-        DB[("SQLite Database\ncloudpilot_tasks.db\n(Tasks, Append-Only Events, Evidence)")]
+        DB[("SQLite Database\ncloudpilot_tasks.db\n(Tasks, Events, Evidence, Inventories, Findings, Assessments)")]
+        Catalog[("Pricing Catalog\ndata/pricing/catalog-v1.json\n(AWS & Docker SKUs, 730h Baseline)")]
         Persistence <--> DB
+        FinOps <--> Catalog
     end
 ```
 
@@ -48,83 +65,46 @@ flowchart TD
 
 ## 3. Logical Boundaries & Separation of Concerns
 
-The backend is built as a clean, cohesive modular monolith adhering strictly to the architecture principles:
+The backend is built as a clean, cohesive modular monolith:
 
 1. **`app/core` (Foundation & Observability)**
    - Configuration management via `Pydantic Settings` with `.env` and environment prefixing (`CLOUDPILOT_*`).
    - Structured JSON logging with context-variable correlation IDs (`X-Correlation-ID`) and task IDs.
    - Automatic regex-based secret redaction (API keys, Bearer tokens, passwords).
-   - Structured domain errors (`CloudPilotError`, `InvalidStateTransitionError`, `SwitchIntegrationError`).
+   - Structured domain errors (`CloudPilotError`, `InvalidStateTransitionError`, `SwitchIntegrationError`, `ValidationError`, `NotFoundError`).
 
 2. **`app/domain` (Domain Contracts & State Machine)**
-   - Strongly typed Pydantic models for `Task`, `TaskEvent`, and `Evidence`.
+   - Strongly typed Pydantic models for `Task`, `TaskEvent`, `Evidence`, `DiscoveredResource`, `InfrastructureInventory`, `Finding`, and `AssessmentSummary`.
    - UTC timestamp normalization on all models.
    - Enforced status lifecycle and transition validation policy.
    - Complete decoupling from transport mechanisms or external SDKs.
 
-3. **`app/persistence` (Persistence Abstraction)**
-   - `TaskRepositoryInterface` abstract contract.
-   - Thread-safe `SQLiteTaskRepository` ensuring foreign keys, indexing, and transactional integrity.
-   - In-memory repository (`InMemoryTaskRepository`) for lightning-fast, zero-IO unit testing.
-   - Append-only event history: audit events can never be mutated or silently overwritten.
+3. **`app/services/discovery` (Filesystem-Protected Infrastructure Discovery)**
+   - Validates workspace boundaries with traversal rejection and symlink escape checks.
+   - Enforces 1MB size bounds and 100-file scan limits.
+   - `TerraformParser`: Safe HCL2 AST parsing, distinguishing known static literals from dynamic variable expressions (`attributes_unknown`).
+   - `ComposeParser`: Safe YAML parsing with immediate regex redaction of plain secrets in environment blocks.
 
-4. **`app/integrations/switch` (Switch Wire Adapter)**
+4. **`app/services/finops` (Deterministic Cost Intelligence)**
+   - Versioned rate catalog (`data/pricing/catalog-v1.json`) with provenance tracking.
+   - Decimal monetary arithmetic with `ROUND_HALF_UP` to prevent IEEE-754 precision drift.
+   - Configurable monthly baseline hours (default 730 hours).
+   - Rules `FIN-001` through `FIN-005` detecting instance over-sizing, unbounded limits, and idle non-production databases.
+
+5. **`app/services/secops` (Security Posture & SRE Reliability)**
+   - Deterministic rule engines evaluating rules `SEC-001` through `SEC-010` and `REL-001` through `REL-005`.
+   - Attaches reproducible, defensible proof dictionaries to every finding.
+
+6. **`app/services/specialists` (Collaborating Specialist Agents)**
+   - `FinOpsSpecialist`: Evaluates cost drivers and emits intermediate Switch room breakdowns.
+   - `SecOpsSpecialist`: Evaluates exposure vulnerabilities and emits intermediate Switch room posture summaries.
+
+7. **`app/persistence` (SQLite & In-Memory Storage)**
+   - Thread-safe `SQLiteTaskRepository` with foreign keys, indexing, and WAL mode.
+   - Tables: `tasks`, `task_events`, `evidence`, `inventories`, `findings`, and `assessments`.
+   - Read-only guarantees: the assessment lifecycle never modifies target workspace files or cloud resources.
+
+8. **`app/integrations/switch` (Switch Wire Adapter)**
    - Decoupled `SwitchAdapterInterface`.
-   - `SwitchWireClient`: Full implementation of the documented Switch Agent Protocol:
-     - Public probe `GET /health`
-     - Out-of-band registration `POST /agents`
-     - Addressing update `POST /agents/{agent_id}/ops/update_agent_detail`
-     - Outbound room messaging `POST /agents/{agent_id}/message`
-     - Persistent WebSocket streaming `GET /agents/{agent_id}/connection/ws` with mandatory 2-second heartbeat responses (`{"type": "pong", "cursor": cursor}`).
-   - `EmulatedSwitchBridge`: Compliant in-process mock for deterministic CI/CD and offline verification.
-
-5. **`app/services` (Task Lifecycle Orchestration)**
-   - `TaskService`: Bridges incoming Switch messages to domain task lifecycles, persists append-only events, and dispatches truthful acknowledgments and reports back to the Switch room.
-
-6. **`app/api` (REST API & Diagnostics)**
-   - Health probes (`GET /health/live`, `GET /health/ready`).
-   - Read-only task, event history, and evidence query endpoints (`/api/v1/tasks/...`).
-   - Diagnostic message simulation endpoint (`POST /api/v1/switch/simulate-message`).
-
----
-
-## 4. Task Lifecycle State Machine
-
-```mermaid
-stateDiagram-v2
-    [*] --> RECEIVED: Switch message received
-    RECEIVED --> ACKNOWLEDGED: Task validated & ack posted to room
-    RECEIVED --> CANCELLED: Explicit cancellation
-    ACKNOWLEDGED --> IN_PROGRESS: Execution started
-    ACKNOWLEDGED --> CANCELLED: Explicit cancellation
-    IN_PROGRESS --> COMPLETED: Execution finished truthfully & report posted
-    IN_PROGRESS --> FAILED: Error encountered & failure posted
-    IN_PROGRESS --> CANCELLED: Operator cancelled
-    COMPLETED --> [*]
-    FAILED --> [*]
-    CANCELLED --> [*]
-```
-
-### Transition Policy Table
-
-| Current Status | Allowed Target Statuses | Notes |
-|:---|:---|:---|
-| `RECEIVED` | `ACKNOWLEDGED`, `CANCELLED` | Task ingested from room. |
-| `ACKNOWLEDGED` | `IN_PROGRESS`, `CANCELLED` | Acknowledgment message dispatched to room. |
-| `IN_PROGRESS` | `COMPLETED`, `FAILED`, `CANCELLED` | Read-only baseline evaluation executed. |
-| `COMPLETED` | *(None)* | Terminal state. Report posted to room. |
-| `FAILED` | *(None)* | Terminal state. Error logged and reported. |
-| `CANCELLED` | *(None)* | Terminal state. Operation aborted. |
-
-Any transition not explicitly defined in the policy raises an `InvalidStateTransitionError` (HTTP 409 Conflict).
-
----
-
-## 5. Switch Centrality Proof
-
-**Question:** *"If Switch is unavailable, can a human still complete the same collaborative workflow through a separate application interface?"*
-
-**Answer: NO.**
-- The human-agent collaborative workflow (receiving instructions, reviewing staging infrastructure, requesting clarifications, delivering acknowledgments, and reporting findings) requires Switch as the collaboration medium.
-- While developer diagnostic endpoints exist for automated CI testing and readiness monitoring, there is no separate standalone user chat interface bypassing Switch.
-- Switch provides the shared room context, participant identity, and message history.
+   - `SwitchWireClient`: Complete implementation of Switch Agent Protocol (WebSocket streaming with <=2s pings, `/message` delivery, `/agents` registration).
+   - `EmulatedSwitchBridge`: Fully compliant mock for deterministic CI/CD and offline verification.

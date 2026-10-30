@@ -110,7 +110,7 @@ The Switch integration was implemented by querying the official Switch AI docume
          "sender": "@operator:switch",
          "sender_name": "Human Operator",
          "message_id": "msg-001",
-         "body": "@CloudPilot review the staging infrastructure for a cost and security assessment. Do not modify any files or infrastructure.",
+         "body": "@cloudpilot-ops-agent assess ./samples/staging for cost, security and reliability risks. Read-only assessment.",
          "timestamp": 1730000000000
        }
      }
@@ -143,7 +143,7 @@ The Switch integration was implemented by querying the official Switch AI docume
 
 ## 4. Smoke Test Procedure
 
-### Automated Smoke Test
+### Automated Protocol Contract Tests
 The repository includes automated contract tests verifying the exact Switch wire protocol:
 ```powershell
 .venv\Scripts\pytest.exe tests/contract/test_switch_protocol_contract.py -v
@@ -163,26 +163,61 @@ The repository includes automated contract tests verifying the exact Switch wire
    ```powershell
    .venv\Scripts\uvicorn.exe app.main:app --port 8000
    ```
-4. In the `cloudpilot-ops` room, type:
+4. In the `cloudpilot-ops` room, trigger a Phase 2 autonomous assessment:
    ```text
-   @CloudPilot review the staging infrastructure for a cost and security assessment. Do not modify any files or infrastructure.
+   @cloudpilot-ops-agent assess ./samples/staging for cost, security and reliability risks. Read-only assessment. Do not modify anything.
    ```
-5. **Expected Output in Room**:
-   - Immediate Acknowledgment:
+5. **Expected Message Sequence in Room**:
+   - **Message 1 (Acknowledgment)**:
      ```text
-     [CloudPilot SwitchOps] Acknowledged request: Task from Human Operator: @CloudPilot review the staging...
+     [CloudPilot SwitchOps] Acknowledged request: Task from Platform Engineer: @cloudpilot-ops-agent assess...
      - Task ID: task-...
      - Status: ACKNOWLEDGED
      ```
-   - Final Assessment Report:
+   - **Message 2 (Discovery Initiation)**:
      ```text
-     ### [CloudPilot SwitchOps] Task Execution Report
-     - Task ID: task-...
-     - Status: COMPLETED
-     - Requested by: @operator:switch
-     - Outcome: CloudPilot SwitchOps Phase 1 Foundation Verified. Read-only policy enforced.
+     🔍 Starting Infrastructure Discovery
+     - Target Workspace: ./samples/staging
+     - Mode: Read-only assessment (zero modifications)
+     Scanning for Terraform (*.tf) and Docker Compose definitions...
      ```
-6. Check persisted task and event history via API:
+   - **Message 3 (Discovery Completed)**:
+     ```text
+     📦 Infrastructure Discovery Completed
+     - Discovered Files: 2 (main.tf, docker-compose.yml)
+     - Total Resources: 9
+     - Scan Duration: 29.1ms
+     Dispatching specialist agents: finops-specialist, secops-specialist...
+     ```
+   - **Message 4 (FinOps Specialist Report)**:
+     ```text
+     💰 FinOps Intelligence Report (finops-specialist)
+     - Estimated Monthly Baseline: $212.83 USD
+     - Billable Components Evaluated: 6
+     - Financial Hygiene Findings: 4
+     Key Cost Drivers & Sizing:
+       • staging_postgres (aws_db_instance:db.m5.large): $99.28/mo
+       • staging_web (aws_instance:m5.large): $70.08/mo
+     ```
+   - **Message 5 (SecOps Specialist Report)**:
+     ```text
+     🛡️ SecOps & SRE Audit Report (secops-specialist)
+     - Security Findings: 10
+     - Reliability Deficits: 5
+     - Severity Breakdown: 🚨 4 Critical | ⚠️ 4 High | ℹ️ 3 Med | 📋 4 Low
+     ```
+   - **Message 6 (Consolidated Assessment Report)**:
+     ```text
+     ## 📊 [CloudPilot SwitchOps] Task Execution Report — Consolidated Assessment
+     - Task ID: task-... | Status: COMPLETED
+     - Target Workspace: ./samples/staging
+     - Total Discovered Resources: 9
+     - Estimated Monthly Baseline: $212.83 USD
+     - Total Findings: 18
+     ```
+6. Query assessment data via API:
    ```powershell
-   curl http://localhost:8000/api/v1/tasks
+   curl http://localhost:8000/api/v1/assessments/<task_id>
+   curl http://localhost:8000/api/v1/assessments/<task_id>/findings
+   curl http://localhost:8000/api/v1/assessments/<task_id>/cost-breakdown
    ```

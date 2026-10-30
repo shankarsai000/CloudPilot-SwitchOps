@@ -43,6 +43,8 @@ Thumbs.db
 *.log
 .env
 *.db
+*.db-shm
+*.db-wal
 docker/scratch/
 scratch/
 

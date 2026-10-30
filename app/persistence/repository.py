@@ -2,17 +2,32 @@
 CloudPilot SwitchOps — Persistence Layer & Repository Interfaces
 
 Provides abstract repository contracts and clean, thread-safe SQLite and
-in-memory implementations for task metadata, append-only events, and evidence.
+in-memory implementations for task metadata, append-only events, evidence,
+discovered inventory, findings, and consolidated assessments.
 """
+
+from __future__ import annotations
 
 import json
 import sqlite3
 import threading
 from abc import ABC, abstractmethod
-from datetime import datetime
-from typing import Any
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, List, Optional
 
 from app.core.errors import TaskConflictError, TaskNotFoundError
+from app.domain.finding import (
+    AssessmentSummary,
+    Finding,
+    FindingCategory,
+    FindingSeverity,
+)
+from app.domain.inventory import (
+    DiscoveredResource,
+    InfrastructureInventory,
+    ResourceCategory,
+)
 from app.domain.models import (
     ActorType,
     Evidence,
@@ -25,7 +40,7 @@ from app.domain.models import (
 
 
 class TaskRepositoryInterface(ABC):
-    """Abstract contract for persisting CloudPilot task metadata and audit events."""
+    """Abstract contract for persisting CloudPilot task metadata, audit events, findings, and assessments."""
 
     @abstractmethod
     def save_task(self, task: Task) -> Task:
@@ -65,6 +80,38 @@ class TaskRepositoryInterface(ABC):
     def get_evidence_for_task(self, task_id: str) -> list[Evidence]:
         """Retrieve all evidence associated with a task."""
 
+    @abstractmethod
+    def save_finding(self, finding: Finding) -> Finding:
+        """Persist a specialist finding."""
+
+    @abstractmethod
+    def get_findings_for_task(
+        self,
+        task_id: str,
+        category: Optional[FindingCategory] = None,
+    ) -> list[Finding]:
+        """Retrieve findings associated with a task, optionally filtered by category."""
+
+    @abstractmethod
+    def get_finding(self, finding_id: str) -> Finding | None:
+        """Retrieve finding by unique finding identifier."""
+
+    @abstractmethod
+    def save_inventory(self, inventory: InfrastructureInventory) -> InfrastructureInventory:
+        """Persist a discovered infrastructure inventory."""
+
+    @abstractmethod
+    def get_inventory_for_task(self, task_id: str) -> InfrastructureInventory | None:
+        """Retrieve discovered infrastructure inventory for a task."""
+
+    @abstractmethod
+    def save_assessment(self, assessment: AssessmentSummary) -> AssessmentSummary:
+        """Persist a consolidated assessment summary."""
+
+    @abstractmethod
+    def get_assessment_for_task(self, task_id: str) -> AssessmentSummary | None:
+        """Retrieve consolidated assessment summary for a task."""
+
 
 class InMemoryTaskRepository(TaskRepositoryInterface):
     """Fast, thread-safe in-memory repository for unit testing."""
@@ -74,6 +121,10 @@ class InMemoryTaskRepository(TaskRepositoryInterface):
         self._tasks: dict[str, Task] = {}
         self._events: dict[str, list[TaskEvent]] = {}
         self._evidence: dict[str, list[Evidence]] = {}
+        self._findings: dict[str, list[Finding]] = {}
+        self._findings_by_id: dict[str, Finding] = {}
+        self._inventories: dict[str, InfrastructureInventory] = {}
+        self._assessments: dict[str, AssessmentSummary] = {}
 
     def save_task(self, task: Task) -> Task:
         with self._lock:
@@ -104,13 +155,15 @@ class InMemoryTaskRepository(TaskRepositoryInterface):
         offset: int = 0,
     ) -> list[Task]:
         with self._lock:
-            results = list(self._tasks.values())
-            if status:
-                results = [t for t in results if t.status == status]
-            if room_id:
-                results = [t for t in results if t.room_id == room_id]
-            results.sort(key=lambda t: t.created_at, reverse=True)
-            return [t.model_copy(deep=True) for t in results[offset : offset + limit]]
+            res: list[Task] = []
+            for t in self._tasks.values():
+                if status and t.status != status:
+                    continue
+                if room_id and t.room_id != room_id:
+                    continue
+                res.append(t.model_copy(deep=True))
+            res.sort(key=lambda x: x.created_at)
+            return res[offset : offset + limit]
 
     def append_event(self, event: TaskEvent) -> TaskEvent:
         with self._lock:
@@ -121,8 +174,8 @@ class InMemoryTaskRepository(TaskRepositoryInterface):
 
     def get_events_for_task(self, task_id: str) -> list[TaskEvent]:
         with self._lock:
-            events = self._events.get(task_id, [])
-            return [e.model_copy(deep=True) for e in events]
+            evts = self._events.get(task_id, [])
+            return [e.model_copy(deep=True) for e in evts]
 
     def save_evidence(self, evidence: Evidence) -> Evidence:
         with self._lock:
@@ -134,43 +187,101 @@ class InMemoryTaskRepository(TaskRepositoryInterface):
 
     def get_evidence_for_task(self, task_id: str) -> list[Evidence]:
         with self._lock:
-            items = self._evidence.get(task_id, [])
-            return [e.model_copy(deep=True) for e in items]
+            evs = self._evidence.get(task_id, [])
+            return [e.model_copy(deep=True) for e in evs]
+
+    def save_finding(self, finding: Finding) -> Finding:
+        with self._lock:
+            tid = finding.task_id
+            if tid not in self._findings:
+                self._findings[tid] = []
+            self._findings[tid].append(finding.model_copy(deep=True))
+            self._findings_by_id[finding.finding_id] = finding.model_copy(deep=True)
+            return finding.model_copy(deep=True)
+
+    def get_findings_for_task(
+        self,
+        task_id: str,
+        category: Optional[FindingCategory] = None,
+    ) -> list[Finding]:
+        with self._lock:
+            fnds = self._findings.get(task_id, [])
+            if category:
+                fnds = [f for f in fnds if f.category == category]
+            return [f.model_copy(deep=True) for f in fnds]
+
+    def get_finding(self, finding_id: str) -> Finding | None:
+        with self._lock:
+            fnd = self._findings_by_id.get(finding_id)
+            return fnd.model_copy(deep=True) if fnd else None
+
+    def save_inventory(self, inventory: InfrastructureInventory) -> InfrastructureInventory:
+        with self._lock:
+            tid = inventory.task_id or "unassigned"
+            self._inventories[tid] = inventory.model_copy(deep=True)
+            return inventory.model_copy(deep=True)
+
+    def get_inventory_for_task(self, task_id: str) -> InfrastructureInventory | None:
+        with self._lock:
+            inv = self._inventories.get(task_id)
+            return inv.model_copy(deep=True) if inv else None
+
+    def save_assessment(self, assessment: AssessmentSummary) -> AssessmentSummary:
+        with self._lock:
+            self._assessments[assessment.task_id] = assessment.model_copy(deep=True)
+            return assessment.model_copy(deep=True)
+
+    def get_assessment_for_task(self, task_id: str) -> AssessmentSummary | None:
+        with self._lock:
+            asm = self._assessments.get(task_id)
+            return asm.model_copy(deep=True) if asm else None
+
+    def close(self) -> None:
+        pass
 
 
 class SQLiteTaskRepository(TaskRepositoryInterface):
-    """
-    Robust SQLite-backed persistence repository with connection synchronization,
-    schema initialization, and strict transactional boundaries.
-    """
+    """Production-grade, thread-safe SQLite implementation of TaskRepositoryInterface."""
 
     def __init__(self, db_path: str = "cloudpilot_tasks.db") -> None:
-        if db_path.startswith("sqlite:///"):
-            self.db_path = db_path.replace("sqlite:///", "", 1)
-        else:
-            self.db_path = db_path
-
+        clean_path = db_path
+        if clean_path.startswith("sqlite:///"):
+            clean_path = clean_path.replace("sqlite:///", "")
+        self.db_path = clean_path
         self._lock = threading.RLock()
-        self._conn: sqlite3.Connection | None = sqlite3.connect(self.db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA foreign_keys = ON;")
-        self._init_db()
-
-    def close(self) -> None:
-        """Close database connection."""
-        with self._lock:
-            if self._conn:
-                self._conn.close()
-                self._conn = None
+        self._local = threading.local()
+        self._all_conns: list[sqlite3.Connection] = []
+        self._init_schema()
 
     def _get_connection(self) -> sqlite3.Connection:
-        if self._conn is None:
-            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            self._conn.row_factory = sqlite3.Row
-            self._conn.execute("PRAGMA foreign_keys = ON;")
-        return self._conn
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = sqlite3.connect(
+                self.db_path,
+                check_same_thread=False,
+                timeout=30.0,
+            )
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = NORMAL")
+            self._local.conn = conn
+            with self._lock:
+                self._all_conns.append(conn)
+        return conn
 
-    def _init_db(self) -> None:
+    def close(self) -> None:
+        with self._lock:
+            for conn in self._all_conns:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            self._all_conns.clear()
+            if hasattr(self._local, "conn"):
+                self._local.conn = None
+
+    def _init_schema(self) -> None:
         with self._lock, self._get_connection() as conn:
             conn.executescript(
                 """
@@ -223,6 +334,70 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_evidence_task_id ON evidence(task_id);
+
+                CREATE TABLE IF NOT EXISTS findings (
+                    finding_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    rule_id TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    source_file TEXT NOT NULL,
+                    source_location TEXT,
+                    observed_value_json TEXT NOT NULL,
+                    expected_value_json TEXT NOT NULL,
+                    evidence_json TEXT NOT NULL,
+                    recommendation TEXT NOT NULL,
+                    confidence REAL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    schema_version TEXT NOT NULL,
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_findings_task_id ON findings(task_id);
+                CREATE INDEX IF NOT EXISTS idx_findings_category ON findings(category);
+                CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
+
+                CREATE TABLE IF NOT EXISTS inventories (
+                    inventory_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    workspace_root TEXT NOT NULL,
+                    resources_json TEXT NOT NULL,
+                    discovered_files_json TEXT NOT NULL,
+                    discovery_duration_ms REAL,
+                    created_at TEXT NOT NULL,
+                    schema_version TEXT NOT NULL,
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_inventories_task_id ON inventories(task_id);
+
+                CREATE TABLE IF NOT EXISTS assessments (
+                    assessment_id TEXT PRIMARY KEY,
+                    task_id TEXT UNIQUE NOT NULL,
+                    workspace_root TEXT NOT NULL,
+                    total_resources INTEGER NOT NULL,
+                    total_findings INTEGER NOT NULL,
+                    critical_findings_count INTEGER NOT NULL,
+                    high_findings_count INTEGER NOT NULL,
+                    medium_findings_count INTEGER NOT NULL,
+                    low_findings_count INTEGER NOT NULL,
+                    estimated_monthly_cost TEXT NOT NULL,
+                    currency TEXT NOT NULL,
+                    finops_summary TEXT,
+                    secops_summary TEXT,
+                    reliability_summary TEXT,
+                    next_phase_recommendations_json TEXT,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    schema_version TEXT NOT NULL,
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_assessments_task_id ON assessments(task_id);
                 """
             )
             conn.commit()
@@ -312,10 +487,10 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
             if room_id:
                 query += " AND room_id = ?"
                 params.append(room_id)
-            query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+            query += " ORDER BY created_at ASC LIMIT ? OFFSET ?"
             params.extend([limit, offset])
 
-            rows = conn.execute(query, params).fetchall()
+            rows = conn.execute(query, tuple(params)).fetchall()
             return [self._row_to_task(row) for row in rows]
 
     def append_event(self, event: TaskEvent) -> TaskEvent:
@@ -388,6 +563,170 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
             ).fetchall()
             return [self._row_to_evidence(row) for row in rows]
 
+    def save_finding(self, finding: Finding) -> Finding:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO findings (
+                    finding_id, task_id, agent_id, category, rule_id, severity,
+                    title, description, source_file, source_location,
+                    observed_value_json, expected_value_json, evidence_json,
+                    recommendation, confidence, status, created_at, schema_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(finding_id) DO UPDATE SET
+                    status = excluded.status,
+                    recommendation = excluded.recommendation
+                """,
+                (
+                    finding.finding_id,
+                    finding.task_id,
+                    finding.agent_id,
+                    finding.category.value,
+                    finding.rule_id,
+                    finding.severity.value,
+                    finding.title,
+                    finding.description,
+                    finding.source_file,
+                    finding.source_location,
+                    json.dumps(finding.observed_value),
+                    json.dumps(finding.expected_value),
+                    json.dumps(finding.evidence),
+                    finding.recommendation,
+                    finding.confidence,
+                    finding.status,
+                    finding.created_at.isoformat(),
+                    finding.schema_version,
+                ),
+            )
+            conn.commit()
+            return finding
+
+    def get_findings_for_task(
+        self,
+        task_id: str,
+        category: Optional[FindingCategory] = None,
+    ) -> list[Finding]:
+        with self._lock, self._get_connection() as conn:
+            if category:
+                rows = conn.execute(
+                    "SELECT * FROM findings WHERE task_id = ? AND category = ? ORDER BY created_at ASC",
+                    (task_id, category.value),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM findings WHERE task_id = ? ORDER BY created_at ASC",
+                    (task_id,),
+                ).fetchall()
+            return [self._row_to_finding(row) for row in rows]
+
+    def get_finding(self, finding_id: str) -> Finding | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM findings WHERE finding_id = ?",
+                (finding_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_finding(row)
+
+    def save_inventory(self, inventory: InfrastructureInventory) -> InfrastructureInventory:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO inventories (
+                    inventory_id, task_id, workspace_root, resources_json,
+                    discovered_files_json, discovery_duration_ms, created_at, schema_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(inventory_id) DO UPDATE SET
+                    resources_json = excluded.resources_json,
+                    discovery_duration_ms = excluded.discovery_duration_ms
+                """,
+                (
+                    inventory.inventory_id,
+                    inventory.task_id or "unassigned",
+                    inventory.workspace_root,
+                    json.dumps([r.model_dump(mode="json") for r in inventory.resources]),
+                    json.dumps(inventory.discovered_files),
+                    inventory.discovery_duration_ms,
+                    inventory.created_at.isoformat(),
+                    inventory.schema_version,
+                ),
+            )
+            conn.commit()
+            return inventory
+
+    def get_inventory_for_task(self, task_id: str) -> InfrastructureInventory | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM inventories WHERE task_id = ? ORDER BY created_at DESC LIMIT 1",
+                (task_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_inventory(row)
+
+    def save_assessment(self, assessment: AssessmentSummary) -> AssessmentSummary:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO assessments (
+                    assessment_id, task_id, workspace_root, total_resources,
+                    total_findings, critical_findings_count, high_findings_count,
+                    medium_findings_count, low_findings_count, estimated_monthly_cost,
+                    currency, finops_summary, secops_summary, reliability_summary,
+                    next_phase_recommendations_json, status, created_at, schema_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(task_id) DO UPDATE SET
+                    total_resources = excluded.total_resources,
+                    total_findings = excluded.total_findings,
+                    critical_findings_count = excluded.critical_findings_count,
+                    high_findings_count = excluded.high_findings_count,
+                    medium_findings_count = excluded.medium_findings_count,
+                    low_findings_count = excluded.low_findings_count,
+                    estimated_monthly_cost = excluded.estimated_monthly_cost,
+                    finops_summary = excluded.finops_summary,
+                    secops_summary = excluded.secops_summary,
+                    reliability_summary = excluded.reliability_summary,
+                    next_phase_recommendations_json = excluded.next_phase_recommendations_json,
+                    status = excluded.status
+                """,
+                (
+                    assessment.assessment_id,
+                    assessment.task_id,
+                    assessment.workspace_root,
+                    assessment.total_resources,
+                    assessment.total_findings,
+                    assessment.critical_findings_count,
+                    assessment.high_findings_count,
+                    assessment.medium_findings_count,
+                    assessment.low_findings_count,
+                    assessment.estimated_monthly_cost,
+                    assessment.currency,
+                    assessment.finops_summary,
+                    assessment.secops_summary,
+                    assessment.reliability_summary,
+                    json.dumps(assessment.next_phase_recommendations),
+                    assessment.status,
+                    assessment.created_at.isoformat(),
+                    assessment.schema_version,
+                ),
+            )
+            conn.commit()
+            return assessment
+
+    def get_assessment_for_task(self, task_id: str) -> AssessmentSummary | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM assessments WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_assessment(row)
+
     def _row_to_task(self, row: sqlite3.Row) -> Task:
         return Task(
             task_id=row["task_id"],
@@ -429,5 +768,62 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
             timestamp=datetime.fromisoformat(row["timestamp"]),
             provenance=json.loads(row["provenance_json"]),
             confidence=row["confidence"],
+            schema_version=row["schema_version"],
+        )
+
+    def _row_to_finding(self, row: sqlite3.Row) -> Finding:
+        return Finding(
+            finding_id=row["finding_id"],
+            task_id=row["task_id"],
+            agent_id=row["agent_id"],
+            category=FindingCategory(row["category"]),
+            rule_id=row["rule_id"],
+            severity=FindingSeverity(row["severity"]),
+            title=row["title"],
+            description=row["description"],
+            source_file=row["source_file"],
+            source_location=row["source_location"],
+            observed_value=json.loads(row["observed_value_json"]),
+            expected_value=json.loads(row["expected_value_json"]),
+            evidence=json.loads(row["evidence_json"]),
+            recommendation=row["recommendation"],
+            confidence=row["confidence"],
+            status=row["status"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            schema_version=row["schema_version"],
+        )
+
+    def _row_to_inventory(self, row: sqlite3.Row) -> InfrastructureInventory:
+        res_list = [DiscoveredResource.model_validate(r) for r in json.loads(row["resources_json"])]
+        return InfrastructureInventory(
+            inventory_id=row["inventory_id"],
+            task_id=row["task_id"],
+            workspace_root=row["workspace_root"],
+            resources=res_list,
+            discovered_files=json.loads(row["discovered_files_json"]),
+            discovery_duration_ms=row["discovery_duration_ms"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            schema_version=row["schema_version"],
+        )
+
+    def _row_to_assessment(self, row: sqlite3.Row) -> AssessmentSummary:
+        return AssessmentSummary(
+            assessment_id=row["assessment_id"],
+            task_id=row["task_id"],
+            workspace_root=row["workspace_root"],
+            total_resources=row["total_resources"],
+            total_findings=row["total_findings"],
+            critical_findings_count=row["critical_findings_count"],
+            high_findings_count=row["high_findings_count"],
+            medium_findings_count=row["medium_findings_count"],
+            low_findings_count=row["low_findings_count"],
+            estimated_monthly_cost=row["estimated_monthly_cost"],
+            currency=row["currency"],
+            finops_summary=row["finops_summary"] or "",
+            secops_summary=row["secops_summary"] or "",
+            reliability_summary=row["reliability_summary"] or "",
+            next_phase_recommendations=json.loads(row["next_phase_recommendations_json"] or "[]"),
+            status=row["status"],
+            created_at=datetime.fromisoformat(row["created_at"]),
             schema_version=row["schema_version"],
         )

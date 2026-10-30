@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  # Insecure Redis cache: publicly bound, no authentication, missing healthcheck & volume (SEC-001, REL-001, REL-005)
+  redis:
+    image: redis:7.0-alpine
+    container_name: staging-redis
+    ports:
+      - "0.0.0.0:6379:6379"
+    restart: "no"
+
+  # Insecure Postgres service: publicly bound, hardcoded secret, missing resource limits (SEC-002, SEC-010, REL-004, REL-005)
+  postgres:
+    image: postgres:15-alpine
+    container_name: staging-postgres
+    ports:
+      - "0.0.0.0:5432:5432"
+    environment:
+      POSTGRES_USER: devuser
+      POSTGRES_PASSWORD: super_insecure_plain_db_password_123
+      POSTGRES_DB: staging_app
+    restart: "no"
+
+  # Dangerous management daemon: privileged mode, docker socket mount, host networking (SEC-004, SEC-005, SEC-006, REL-002)
+  admin_daemon:
+    image: alpine:3.18
+    container_name: staging-admin-daemon
+    privileged: true
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: ["sleep", "infinity"]
