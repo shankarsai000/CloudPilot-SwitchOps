@@ -113,6 +113,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @field_validator("debug", mode="before")
+    @classmethod
+    def validate_debug(cls, value: object) -> bool:
+        """Safely coerce truthy/falsy environment strings into boolean."""
+        if isinstance(value, str):
+            norm = value.strip().lower()
+            return norm in ("true", "1", "yes", "on", "debug")
+        return bool(value)
+
     @field_validator("environment", mode="before")
     @classmethod
     def parse_environment(cls, value: str) -> Environment:

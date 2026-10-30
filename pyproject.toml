@@ -22,11 +22,18 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["docker", "."]
-testpaths = ["docker"]
+pythonpath = ["app", "docker", "."]
+testpaths = ["tests", "docker/tests"]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::pydantic.PydanticDeprecatedSince20",
     "ignore::starlette.exceptions.StarletteDeprecationWarning"
 ]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = ["B008", "TRY401", "BLE001", "UP017", "UP041"]

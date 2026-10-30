@@ -1,394 +1,269 @@
-# CloudPilot AI
-### Autonomous Multi-Cloud Governance, Optimization, and Operations Operating System
+# CloudPilot SwitchOps
+### Switch-Native Autonomous Cloud Engineering Control Room
 
-[![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Platform Tests](https://img.shields.io/badge/Tests-288%20PASSED%20(100%25)-brightgreen.svg)](docker/tests)
-[![Multi-Cloud](https://img.shields.io/badge/Multi--Cloud-AWS%20%7C%20GCP%20%7C%20Azure%20%7C%20K8s-orange.svg)]()
-[![Autonomy Levels](https://img.shields.io/badge/Autonomy-L0%20to%20L5%20Progressive-blueviolet.svg)]()
-[![Safety Plane](https://img.shields.io/badge/Safety-Authoritative%20Kill%20Switch-red.svg)]()
-[![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey.svg)]()
+[![Switch AI Native](https://img.shields.io/badge/Switch-Native%20Integration-6366f1.svg)](https://switchagents.ai/)
+[![Tests Passing](https://img.shields.io/badge/Phase%201%20Tests-27%20Passed-brightgreen.svg)](tests/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey.svg)](LICENSE)
+
+> Built for the **Flip the Switch Hackathon — Track 01: Best Business Workflow**  
+> Hackathon details: [wemakedevs.org/hackathons/switch](https://www.wemakedevs.org/hackathons/switch)  
+> Switch Documentation: [docs.switchagents.ai](https://docs.switchagents.ai/)
 
 ---
 
-## Executive Overview
+## 1. What CloudPilot SwitchOps Does
 
-**CloudPilot AI** is an enterprise-grade autonomous cloud governance, cost intelligence, and infrastructure optimization platform. Built on an authoritative safety and autonomy control plane, CloudPilot transitions cloud management from reactive alerting and manual ticketing into safe, explainable, closed-loop autonomous operations.
+**CloudPilot SwitchOps** transforms disjointed cloud operations into a shared, collaborative control room inside **Switch AI**. 
 
-Unlike traditional dashboards that inundate SREs and FinOps teams with passive charts, CloudPilot actively reasons over live multi-cloud infrastructure, simulates the counterfactual impact of optimization strategies, evaluates risk across 9 safety dimensions, enforces human approval gating, safely applies changes via sandboxes and GitOps pipelines, and continuously verifies post-execution outcomes with automatic rollback.
-
-```
-       ┌──────────────────────────────────────────────────────────────┐
-       │                 CloudPilot Command Center OS                 │
-       │     (15 Workspaces • Guided User Journey • Live Copilot)     │
-       └──────────────────────────────┬───────────────────────────────┘
-                                      ▼
-       ┌──────────────────────────────────────────────────────────────┐
-       │              Authoritative Safety Control Plane              │
-       │  (Progressive Autonomy L0-L5 • Policy-as-Code • Kill Switch) │
-       └──────────────────────────────┬───────────────────────────────┘
-                                      ▼
-       ┌──────────────────────────────────────────────────────────────┐
-       │                 Unified Intelligence Pipeline                │
-       │           (M1 Discovery ──► M2 Cost ──► M4 Risk              │
-       │            ──► M5 Strategy ──► M6 Digital Twin               │
-       │            ──► M8 Learning ──► M9 Decision Engine)           │
-       └──────────────────────────────┬───────────────────────────────┘
-                                      ▼
-       ┌──────────────────────────────────────────────────────────────┐
-       │              Production Multi-Cloud Adapters                 │
-       │      AWS (Read-Only) • GCP • Azure • Kubernetes • GitOps     │
-       └──────────────────────────────────────────────────────────────┘
-```
+Instead of isolating human operators inside complex dashboards and autonomous agents inside CLI silos, CloudPilot SwitchOps unites human engineers and specialized AI agents in a shared Switch team-chat room (`cloudpilot-ops`). Together, they:
+1. **Investigate cloud infrastructure** across cost, security, and reliability dimensions.
+2. **Evaluate trade-offs** using verifiable evidence findings and counterfactual simulations.
+3. **Govern modifications** through explicit human-in-the-loop approvals.
+4. **Execute bounded actions** through sandboxed GitOps and cloud adapters.
+5. **Verify outcomes** with continuous post-execution monitoring and deterministic rollback.
 
 ---
 
-## Platform Stack: 12 Integrated Operational Phases
+## 2. Business Problem Addressed
 
-CloudPilot is architected as 12 modular, production-hardened subsystems:
+Modern enterprise cloud management suffers from **The Operational Hand-off Gap**:
+- **Siloed Tooling**: FinOps, SecOps, and Platform Engineering tools produce disjointed alerts and spreadsheets that lack business context.
+- **Runaway Cloud Costs**: Infrastructure drifts silently with idle instances, unattached volumes, and over-provisioned clusters without unified review.
+- **Fear of Autonomous Changes**: Operators distrust black-box AI tools that attempt to modify production infrastructure without auditable consensus or human gating.
+- **Context Loss**: Change decisions made in ticket queues or private chats lack cryptographic audit trails linking the initial problem to the final verified outcome.
 
-### 1. [Production Platform Foundation](docker/core/)
-- Configuration management with strict environment separation (`development`, `staging`, `production`).
-- PostgreSQL integration with connection pooling, Alembic database migrations, and health checks.
-- Redis integration for distributed locking, pub/sub streaming, and task queuing.
-- Structured JSON logging, correlation request tracing, centralized error handling, and Prometheus observability metrics.
-
-### 2. [Digital Enterprise Simulator](docker/simulator/)
-- Deterministic simulation of enterprise topologies across **7 industry scenarios**:
-  - **SaaS**, **Banking**, **E-commerce**, **AI Research**, **Startup**, **Healthcare**, **Gaming**.
-- Generates internally consistent cloud accounts, regions, VPCs, subnets, compute, Kubernetes clusters, databases, storage, IAM roles, dependency graphs, real-time telemetry, and historical optimization opportunities.
-- Scale-tested for 100+, 500+, and 1,000+ connected resources.
-
-### 3. [Unified Intelligence Pipeline](docker/pipeline/)
-- Closed-loop reasoning pipeline passing structured artifacts across specialized modules:
-  - **M1 Infrastructure Discovery**: Multi-cloud topology mapping and dependency graphing.
-  - **M2 Cost Intelligence**: Spend baselines, idle waste detection, and multi-horizon cost forecasts.
-  - **M3 Application Intelligence**: Service criticality, SLO budgets, and traffic patterns.
-  - **M4 Risk Intelligence**: Blast radius calculations, single points of failure (SPOFs), and failure path analysis.
-  - **M5 Strategy Agent**: Multi-objective optimization roadmaps balancing cost, availability, and latency.
-  - **M6 Digital Twin**: Counterfactual simulation modeling pre- vs. post-action performance.
-  - **M7 Explainability**: Causal reasoning graphs and natural-language justifications.
-  - **M8 Learning**: Continuous organizational Cloud DNA updating and experience replay.
-  - **M9 Decision Engine**: Multi-agent consensus deliberation and weighted voting council.
-
-### 4. [TrueForge Autonomous Agent Runtime](docker/trueforge/)
-- Production harness for autonomous infrastructure agents.
-- Isolated sandbox execution environment protecting production systems.
-- Governed tool registry exposing 13 safe, audited operations.
-- Streaming event telemetry delivering step-by-step reasoning.
-
-### 5. [Safety & Autonomy Control Plane](docker/governance/)
-- **Progressive Autonomy Levels**:
-  - **L0 — Observe**: Read-only discovery and metric collection.
-  - **L1 — Recommend**: Generates candidate optimization plans without execution.
-  - **L2 — Simulate**: Counterfactual digital twin validation.
-  - **L3 — Execute with Human Approval**: Changes require explicit authorized sign-off.
-  - **L4 — Limited Autonomous Execution**: Low-risk changes execute automatically within budget limits.
-  - **L5 — Full Autonomous Execution**: High-confidence operations execute autonomously with automated rollbacks.
-- **9-Dimension Action Evaluator**: Evaluates Risk, Confidence, Criticality, Policy, Blast Radius, Reversibility, Simulation, Historical Success, and Required Approval.
-- **Authoritative Emergency Stop (Kill Switch)**: Instantly halts all mutating executions platform-wide or on scoped environments.
-- **Mutual Exclusion Action Locks**: Distributed locks with TTL prevent concurrent modification conflicts on the same cloud resource.
-
-### 6. [Outcome Verification & Learning Loop](docker/verification/)
-- **Ex-Ante vs. Ex-Post Verification**: Compares pre-execution expected metrics against empirical post-execution telemetry across **5 dimensions**: Cost, Performance, Availability, Risk, and Savings.
-- **Deterministic Rollback Engine**: Automatic and idempotent rollbacks triggered upon safety threshold breaches.
-- **3-Way Savings Attribution**: Distinguishes **Predicted Savings** vs. **Verified Savings** vs. **Annualized Run-Rate Savings**.
-- **Organizational Cloud DNA**: Continuously tracks deployment style, risk tolerance, rollback frequencies, and autonomy progression.
-
-### 7. [CloudPilot Command Center OS](docker/static/)
-- Calm, professional, enterprise-grade Single-Page Application OS.
-- **Primary User Journey Stepper**:
-  $$\text{Goal} \longrightarrow \text{Analyze} \longrightarrow \text{Plan} \longrightarrow \text{Simulate} \longrightarrow \text{Approval} \longrightarrow \text{Execute} \longrightarrow \text{Monitor} \longrightarrow \text{Verify}$$
-- **15 Dedicated Workspaces**: Overview Dashboard, Agent Timeline, Agent Workspaces, Infrastructure Explorer, Cost Intelligence, Risk Explorer, Strategy Workspace, Digital Twin, Decision Council, Approval Center, Execution Console, Rollback View, Learning Timeline, Savings Attribution, and CloudPilot Copilot.
-- **Server-Sent Events (SSE)**: Real-time event streaming at `/api/v1/command-center/stream`.
-- **Zero Mock Data Guarantee**: Every UI element binds to live backend API state.
-
-### 8. [Production Multi-Cloud Integration & Hardening](docker/providers/)
-- Native multi-cloud adapters: **AWS**, **Google Cloud (GCP)**, **Microsoft Azure**, and **Kubernetes**.
-- **AWS Default Read-Only Mode**: AWS adapter initializes in `READ_ONLY` mode. Any mutating call raises `ReadOnlyViolationError`.
-- **Strict Capability Discovery**: Providers expose only supported capabilities; agents cannot execute unsupported operations (`UnsupportedCapabilityError`).
-- **Resilience Engine**: Token bucket rate limiting, three-state circuit breakers (`CLOSED`/`OPEN`/`HALF_OPEN`), exponential backoff retries with full jitter, and correlation request tracing.
-- **Secure Credential Vault**: `SecretString` masking, short-lived temporary credentials (AWS STS, GCP OAuth2, Azure MSI, K8s ServiceAccount), least-privilege policy validator, and zero-downtime rotation.
-
-### 9. [Real Agentic Control Loop & Autonomous Benchmark](docker/trueforge/)
-- **14-State Durable State Machine**: `CREATED`, `PLANNING`, `EXECUTING_TOOL`, `OBSERVING`, `DECIDING`, `WAITING_FOR_APPROVAL`, `EXECUTING`, `VERIFYING`, `COMPLETED`, `FAILED`, `BLOCKED`, `CANCELLED`, `ROLLING_BACK`, `ROLLED_BACK`.
-- **Atomic Disk Persistence**: Full agent execution context serialized atomically to disk, allowing seamless cold restarts from approval checkpoints.
-- **Dynamic Reasoning Loop**: Iterative `observe -> reason -> act` loop with blast-radius bounding and critical tier-1 dependency protection.
-- **Self-Healing Provider Recovery**: Automatically detects sandbox validation failures and repairs missing Terraform provider configurations.
-- **Ground Truth Benchmark Harness**: Automated evaluation scoring 10 operational metrics against ground truth targets.
-
-### 10. [CloudPilot Copilot (Conversational Assistant & REST API)](docker/copilot/)
-- **Natural-Language Interface**: Intent classifier parsing billing inquiries, infrastructure queries, dependency requests, mission dispatch, and approvals.
-- **Billing Anomaly Diagnostics**: Formulates structured evidence with top cost contributors, optimization candidates, and potential savings.
-- **Autonomous Mission Dispatch**: "Fix it" commands automatically launch the TrueForge control loop, pausing at human approval checkpoints.
-- **Interactive Multi-Turn Approvals**: Conversational resolution of pending missions via "Approve" or "Deny".
-- **REST API Endpoints**: Dedicated routes mounted at `/api/v1/copilot/*` for chat, conversation management, and approval handling.
-
-### 11. [Real AWS Read-Only Production Agent](docker/trueforge/aws_agent.py)
-- **Strict Read-Only Enforcement**: Agent operates strictly through `AWSProductionAdapter` in `READ_ONLY` mode. Direct mutation calls unconditionally raise `ReadOnlyViolationError`.
-- **8-Service Live Inventory Discovery**: Scans and normalizes **EC2** instances, **EBS** volumes (detects unattached orphan volumes), **RDS** databases (detects oversized staging replicas), **VPC** networking, **ELB** load balancers (detects idle balancers), **ECS/EKS** clusters, **S3** storage tiering, and **IAM** security configurations.
-- **Tier-1 Critical Dependency Protection**: Automatically protects mission-critical databases, auth tiers, and ingress routing from any mutation.
-- **Declarative GitOps Remediation**: Formulates actionable `AWSRecommendationReport` with production-ready Terraform HCL.
-
-### 12. [Controlled GitOps Execution Orchestrator](docker/trueforge/gitops_orchestrator.py)
-- **6-Stage Declarative Lifecycle**:
-  1. **Plan**: Formulates declarative Terraform HCL plans with diffs and cost impact deltas.
-  2. **Review**: Syntax linting, drift detection, and static compliance checking.
-  3. **Approval**: Safety Control Plane gating with immutable cryptographic SHA-256 audit hashing.
-  4. **Apply**: Concurrency locking with `ActionLockManager`. Direct apply on AWS is strictly blocked (`ReadOnlyViolationError`), directing changes to safe GitOps pull requests.
-  5. **Verify**: Multi-dimensional post-apply verification (latency, availability, CPU, error rates).
-  6. **Rollback**: Automatic deterministic rollback if outcome verification detects an SLO breach.
-- **Cryptographic Audit Trail**: Every stage transition updates an immutable SHA-256 audit hash chain.
+**CloudPilot SwitchOps solves this by anchoring all operational collaboration in Switch**. Every request, acknowledgment, evidence finding, risk assessment, human approval, and execution summary lives in the shared Switch room history and an append-only database audit log.
 
 ---
 
-## Architecture Diagram
+## 3. Why Switch is Essential (Switch Centrality)
+
+Switch is the foundational collaboration infrastructure for CloudPilot SwitchOps. **It is not a decorative chat plugin.**
+
+### The Switch Centrality Test
+> *"If Switch is unavailable, can a human still complete the same collaborative workflow through a separate application interface?"*  
+> **The answer is NO.**
+
+- **Shared Collaboration Surface**: The human-agent conversational handoff, intent capture, room instructions, and progress notifications strictly require Switch.
+- **Identity & Addressing**: Switch handles participant identity (`@operator:switch`), permissions, and addressed message routing (`message.addressed`).
+- **Unified Wire Protocol**: CloudPilot communicates with Switch using the official bidirectional wire protocol (WebSocket streaming for incoming events and HTTP for outbound messaging).
+- CloudPilot exposes health diagnostics and read-only state endpoints for operators, but does not provide a rogue chat interface bypassing Switch.
+
+---
+
+## 4. System Architecture
 
 ```mermaid
-graph TB
-    subgraph ClientUI ["Command Center OS (docker/static/)"]
-        TopNav["Scenario Switcher • Autonomy Level • Emergency Kill Switch"]
-        Stepper["Primary Journey: Goal -> Analyze -> Plan -> Simulate -> Approval -> Execute -> Monitor -> Verify"]
-        Views["15 Dedicated Workspaces"]
-        Copilot["Conversational Copilot Drawer"]
+flowchart TD
+    subgraph HumanCollaboration ["Switch Shared Collaboration Surface"]
+        Human["Human Operator / Platform Engineer\n(@operator:switch)"]
+        Room["Switch Room: cloudpilot-ops\n(Mattermost / Slack / Discord / Console)"]
+        Human <-->|Chat & Commands| Room
     end
 
-    subgraph APIGateway ["API v1 Gateway (FastAPI / SSE)"]
-        Router["/api/v1/*"]
-        Stream["/api/v1/command-center/stream (SSE)"]
-        ProvidersAPI["/api/v1/providers/*"]
-        GitOpsAPI["/api/v1/providers/gitops/*"]
+    subgraph SwitchCore ["Switch Infrastructure"]
+        Bridge["Switch Agent Bridge / Gateway\n(WebSocket + HTTP REST)"]
+        Room <-->|Event Buffer & Delivery| Bridge
     end
 
-    subgraph CoreEngines ["Platform Core Engines"]
-        Pipeline["Intelligence Pipeline M1-M9"]
-        TrueForge["TrueForge Autonomous Runtime"]
-        Safety["Safety Control Plane (L0-L5)"]
-        Verification["Outcome Verification & Learning Loop"]
+    subgraph CloudPilotBackend ["CloudPilot SwitchOps Backend (Modular Monolith)"]
+        Adapter["Switch Wire Adapter\napp/integrations/switch\n(SwitchWireClient / EmulatedBridge)"]
+        Service["Task Lifecycle & Orchestration\napp/services/TaskService"]
+        Domain["Domain Contracts & Transition Policy\napp/domain\n(Task, TaskEvent, Evidence)"]
+        Persistence["Persistence Layer\napp/persistence\n(SQLiteTaskRepository)"]
+        API["HTTP API & Health Probes\napp/api\n(/health/live, /health/ready, /api/v1/tasks)"]
+
+        Bridge <-->|WebSocket: Events & Pings (<=2s)\nHTTP: Outbound /message| Adapter
+        Adapter <-->|Addressed Message Events| Service
+        Service -->|Enforces State Machine| Domain
+        Service -->|Append-Only Events & Metadata| Persistence
+        API -->|Read Probes & State| Persistence
+        API -->|Readiness Probe| Adapter
     end
 
-    subgraph ProviderLayer ["Production Provider Adapters (docker/providers/)"]
-        AWS["AWS Adapter (READ_ONLY by default)"]
-        GCP["GCP Adapter (Compute, SQL, GKE, Scale)"]
-        Azure["Azure Adapter (VM, SQL, Storage, Scale)"]
-        K8s["Kubernetes Adapter (Pods, Deployments, Scale)"]
-        GitOpsEngine["Terraform / GitOps Lifecycle Engine"]
+    subgraph Storage ["CloudPilot Data Layer"]
+        DB[("SQLite Database\ncloudpilot_tasks.db\n(Tasks, Events, Evidence)")]
+        Persistence <--> DB
     end
-
-    TopNav --> Router
-    Stepper --> Router
-    Views --> Router
-    Copilot --> Router
-    Router --> Pipeline
-    Router --> TrueForge
-    Router --> Safety
-    Router --> Verification
-    Router --> ProvidersAPI
-    ProvidersAPI --> ProviderLayer
-    GitOpsAPI --> GitOpsEngine
-    GitOpsEngine --> Safety
-    GitOpsEngine --> Verification
-    Stream -->|Real-Time SSE| Views
 ```
+
+### Architectural Principles Enforced:
+1. **Decoupled Domain**: Domain logic never imports or depends directly on Switch wire transport or third-party SDKs.
+2. **Explicit State Machine**: Task lifecycles follow a strict transition policy (`RECEIVED` → `ACKNOWLEDGED` → `IN_PROGRESS` → `COMPLETED`).
+3. **Append-Only Auditing**: Every milestone emits an immutable `TaskEvent` stored with UTC timestamps and correlation IDs.
+4. **Secret Protection**: Bearer tokens, API keys, and sensitive configuration are masked in logs and excluded from serialization.
 
 ---
 
-## 202/202 Automated Tests Passing (100% Success)
+## 5. Switch Installation & Setup
 
-All 202 platform integration tests across all 8 phases pass with zero failures and zero warnings:
-
-```bash
-python -m pytest docker/tests -v
-```
-
-| Phase | Test Module | Tests | Status |
-| :--- | :--- | :--- | :--- |
-| **Phase 1** | `test_platform_foundation.py` | 29 | **PASSED (100%)** |
-| **Phase 2** | `test_simulator.py` | 28 | **PASSED (100%)** |
-| **Phase 3** | `test_pipeline.py` | 21 | **PASSED (100%)** |
-| **Phase 4** | `test_trueforge_runtime.py` | 22 | **PASSED (100%)** |
-| **Phase 5** | `test_safety_control_plane.py` | 26 | **PASSED (100%)** |
-| **Phase 6** | `test_outcome_and_learning_loop.py` | 25 | **PASSED (100%)** |
-| **Phase 7** | `test_command_center.py` | 17 | **PASSED (100%)** |
-| **Phase 8** | `test_production_providers.py` | 24 | **PASSED (100%)** |
-| **Phase 8** | `test_security_and_chaos.py` | 10 | **PASSED (100%)** |
-| **TOTAL** | **Full Platform Suite** | **202** | **100% PASSED** |
+1. **Install Switch Console**:
+   Download and install the desktop application for Windows, macOS, or Linux from [switchagents.ai](https://switchagents.ai/).
+2. **Configure Provider & Workspace**:
+   Open Switch Console and let the setup checklist guide you through your agent provider connection.
+3. **Start the Agent Bridge**:
+   Switch Console runs the Agent Bridge locally (default: `http://localhost:8080`).
 
 ---
 
-## Quickstart & Installation
+## 6. How to Connect the CloudPilot Agent
 
-### Prerequisites
-- Python 3.11+ (Python 3.14 fully supported)
-- Git
-- Docker & Docker Compose (optional, for containerized deployment)
+### Option A: Automatic Registration
+Configure your `.env` with your Switch deployment registration key:
+```env
+CLOUDPILOT_SWITCH_BRIDGE_URL="http://localhost:8080"
+CLOUDPILOT_SWITCH_REGISTRATION_KEY="<your-registration-token>"
+CLOUDPILOT_SWITCH_AGENT_NAME="cloudpilot-ops-agent"
+```
+On boot, CloudPilot registers via `POST /agents` and stores its permanent `api_key`.
 
-### 1. Clone & Setup Virtual Environment
-```bash
-git clone https://github.com/shankarsai000/CloudPilot.git
-cd CloudPilot
-
-# Create and activate virtual environment
-python -m venv .venv
-# On Linux/macOS:
-source .venv/bin/activate
-# On Windows PowerShell:
-.\.venv\Scripts\Activate.ps1
-
-# Install production dependencies
-pip install -r docker/requirements.txt
+### Option B: Pre-Registered Credentials
+If the agent was already registered in Switch Console:
+```env
+CLOUDPILOT_SWITCH_BRIDGE_URL="http://localhost:8080"
+CLOUDPILOT_SWITCH_AGENT_ID="<agent-id>"
+CLOUDPILOT_SWITCH_AGENT_API_KEY="<agent-api-key>"
 ```
 
-### 2. Start CloudPilot Control Plane
-```bash
-python -m uvicorn main:app --app-dir docker --host 127.0.0.1 --port 8000 --reload
-```
-
-### 3. Access the Live Platform
-- **Command Center OS**: Open **`http://127.0.0.1:8000/dashboard/`** in your browser.
-- **Interactive API Documentation (Swagger)**: Open **`http://127.0.0.1:8000/docs`**.
-- **Alternative API Documentation (ReDoc)**: Open **`http://127.0.0.1:8000/redoc`**.
-
-### 4. Run Automated Test Suite
-```bash
-python -m pytest docker/tests -q
-```
+### Option C: Offline / Standalone Emulation
+If running in an isolated environment without Switch Console running, CloudPilot automatically boots the internal **EmulatedSwitchBridge**, enabling full local testing with 100% deterministic fidelity.
 
 ---
 
-## Multi-Cloud Provider Configuration
+## 7. The Operations Room (`cloudpilot-ops`)
 
-CloudPilot supports secure configuration across all four primary providers:
-
-```bash
-# Provider Capability Discovery
-curl -X GET http://127.0.0.1:8000/api/v1/providers
-
-# Query specific capabilities (e.g. Google Cloud)
-curl -X GET http://127.0.0.1:8000/api/v1/providers/gcp/capabilities
-
-# Check AWS Adapter Status (Confirms Read-Only Safety Mode)
-curl -X GET http://127.0.0.1:8000/api/v1/providers/aws/capabilities
-
-# Check Resilience & Circuit Breaker Metrics
-curl -X GET http://127.0.0.1:8000/api/v1/providers/resilience/metrics
-```
-
-### Triggering the GitOps / Terraform Lifecycle
-```bash
-# 1. Plan
-curl -X POST http://127.0.0.1:8000/api/v1/providers/gitops/pipeline \
-  -H "Content-Type: application/json" \
-  -d '{
-    "stage": "plan",
-    "workspace": "prod-k8s",
-    "provider": "kubernetes",
-    "target_resource": "k8s://production/namespaces/default/deployments/frontend-web",
-    "action": "SCALE_DEPLOYMENT",
-    "estimated_cost_delta": -40.0
-  }'
-
-# 2. Review -> 3. Approval -> 4. Apply -> 5. Verify -> 6. Rollback
-```
+1. In Switch Console or Gateway, create a new room:
+   - **Name**: `cloudpilot-ops`
+   - **Topic**: `CloudPilot Autonomous Cloud Operations Control Room`
+   - **Instructions**:
+     ```text
+     You are collaborating with CloudPilot SwitchOps to review cloud infrastructure,
+     evaluate cost and security trade-offs, and manage change approvals.
+     Always enforce least-privilege read-only defaults.
+     ```
+2. Add `@cloudpilot-ops-agent` to the room.
 
 ---
 
-## Production Documentation & Operations Guides
+## 8. First End-to-End Workflow
 
-Detailed operational documentation is available in [`docker/docs/`](docker/docs/):
-- **[Production Operations Guide](docker/docs/PRODUCTION_OPERATIONS_GUIDE.md)**:
-  - Deployment architecture (Kubernetes, Helm, Docker multi-stage build)
-  - Secrets management (Vault, STS, OAuth2, credential rotation runbook)
-  - Monitoring & Prometheus observability
-  - Incident response & Emergency Stop protocols
-  - Deterministic rollback runbooks & idempotency guarantees
-  - Backups, WAL archiving & PITR
-  - Disaster recovery (RPO < 1m, RTO < 5m)
-  - Scaling & Horizontal Pod Autoscaler (HPA)
-- **[Production-Readiness Verification Report](docker/docs/PRODUCTION_READINESS_REPORT.md)**:
-  - Formal sign-off and audit matrix certifying all 288 passing tests, provider capabilities, security controls, and production readiness.
-
----
-
-## Autonomous Testing & Verification Matrix
-
-```bash
-python -m pytest docker/tests -q
-........................................................................ [ 25%]
-........................................................................ [ 50%]
-........................................................................ [ 75%]
-........................................................................ [100%]
-288 passed in 113.93s (0:01:53)
+In the `cloudpilot-ops` room, a human operator posts:
+```text
+@CloudPilot review the staging infrastructure for a cost and security assessment. Do not modify any files or infrastructure.
 ```
 
-| Test Suite | Subsystem / Focus | Tests | Status |
-|:---|:---|:---:|:---:|
-| `test_platform_foundation.py` | Phase 1 Foundation, Config, DB, Redis & Resilience | 26 | ✅ PASSED |
-| `test_simulator.py` | Phase 2 Digital Enterprise Simulator (7 scenarios) | 22 | ✅ PASSED |
-| `test_pipeline.py` | Phase 3 Unified Intelligence Pipeline (M1–M9) | 16 | ✅ PASSED |
-| `test_trueforge_runtime.py` | Phase 4 TrueForge Agent Runtime & Sandbox | 18 | ✅ PASSED |
-| `test_safety_control_plane.py` | Phase 5 Governance, Policy Engine & L0–L5 Autonomy | 35 | ✅ PASSED |
-| `test_outcome_and_learning_loop.py` | Phase 6 Outcome Verification & Learning Engine | 20 | ✅ PASSED |
-| `test_command_center.py` | Phase 7 Command Center OS & Approvals | 20 | ✅ PASSED |
-| `test_production_providers.py` | Phase 8 Multi-Cloud Adapters & Resilience | 26 | ✅ PASSED |
-| `test_golden_path.py` | D1–D6 End-to-End Golden Path Autonomous Orchestrator | 17 | ✅ PASSED |
-| `test_agentic_loop.py` | **Phase 9 Real Closed-Loop Autonomy & Benchmark** | 19 | ✅ PASSED |
-| `test_copilot_conversational.py` | **Phase 10 CloudPilot Copilot & REST API** | 15 | ✅ PASSED |
-| `test_aws_readonly_agent.py` | **Phase 11 Real AWS Read-Only Agent (8 Services)** | 12 | ✅ PASSED |
-| `test_controlled_gitops.py` | **Phase 12 Controlled GitOps 6-Stage Pipeline** | 10 | ✅ PASSED |
-| *Module Unit Tests* | Individual M1–M11 Module Unit Tests | 32 | ✅ PASSED |
-| **Total Test Suite** | **Entire CloudPilot Platform** | **288** | **✅ 100% PASSED** |
+### Execution Flow:
+1. **Receive**: Switch pushes the addressed message frame over WebSocket (`GET /agents/{id}/connection/ws`).
+2. **Identify**: CloudPilot validates the prompt and extracts the request into a new `Task` in `RECEIVED` status.
+3. **Acknowledge**: CloudPilot transitions to `ACKNOWLEDGED` and immediately posts to the room:
+   ```text
+   [CloudPilot SwitchOps] Acknowledged request: Review staging infrastructure...
+   - Task ID: task-4953af7e3e0a
+   - Status: ACKNOWLEDGED
+   - Correlation ID: corr-ba31fbf2d85a
+   ```
+4. **Execute**: CloudPilot transitions to `IN_PROGRESS`, records a `TASK_STARTED` event, and executes the Phase 1 read-only review baseline.
+5. **Report**: CloudPilot transitions to `COMPLETED`, records `TASK_COMPLETED`, and posts the final truthful outcome in the room:
+   ```markdown
+   ### [CloudPilot SwitchOps] Task Execution Report
+   - **Task ID**: `task-4953af7e3e0a`
+   - **Status**: `COMPLETED`
+   - **Requested by**: @operator:switch
+   - **Room**: `cloudpilot-ops`
+   - **Correlation ID**: `corr-ba31fbf2d85a`
+
+   **Assessment Outcome:**
+   CloudPilot SwitchOps Phase 1 Foundation Verified.
+   - Read-only policy enforced: zero modifications made to files or infrastructure.
+   - Live multi-cloud discovery & FinOps/SecOps intelligence engines will activate in Phase 2.
+   - Switch collaboration bridge and task audit trail are verified active.
+   ```
 
 ---
 
-## Repository Structure
+## 9. Running the Application
 
-```
-CloudPilot/
-├── .github/                       # GitHub Actions workflows & CI configs
-├── alembic.ini                    # Database migration configuration
-├── docker-compose.yml             # Local multi-container development orchestration
-├── pyproject.toml                 # Build system & tooling configuration
-├── pytest.ini                     # Pytest runner settings
-├── README.md                      # Production repository documentation
-└── docker/                        # Core platform codebase
-    ├── main.py                    # Application entry point & FastAPI factory
-    ├── golden_path.py             # D1–D6 End-to-End Golden Path Orchestrator
-    ├── requirements.txt           # Python dependencies
-    ├── core/                      # Phase 1: Platform foundation (config, db, logging, events)
-    ├── simulator/                 # Phase 2: Digital Enterprise Simulator (7 scenarios)
-    ├── pipeline/                  # Phase 3: Unified Intelligence Pipeline (M1-M9)
-    ├── trueforge/                 # Phase 4, 9, 11, 12: TrueForge Autonomous Agent Runtime
-    │   ├── state_machine.py       # 14-state durable state machine with cold-restart recovery
-    │   ├── autonomous_loop.py     # Dynamic observe -> reason -> act reasoning loop
-    │   ├── stop_conditions.py     # Bounded autonomy stop condition evaluator
-    │   ├── agent_evaluator.py     # Ground truth benchmark scoring 10 operational metrics
-    │   ├── aws_agent.py           # Phase 11: Real AWS Read-Only Agent (8 services)
-    │   └── gitops_orchestrator.py # Phase 12: Controlled GitOps 6-Stage Delivery Orchestrator
-    ├── copilot/                   # Phase 10: Conversational Copilot & REST API
-    │   ├── models.py              # Copilot roles, intents, messages, sessions
-    │   ├── engine.py              # Natural-language intent parser & "Fix it" dispatcher
-    │   └── routes.py              # REST API endpoints (/api/v1/copilot/*)
-    ├── governance/                # Phase 5: Safety & Autonomy Control Plane (L0-L5)
-    ├── verification/              # Phase 6: Outcome Verification & Learning Loop
-    ├── static/                    # Phase 7: Command Center OS UI (HTML5, Vanilla CSS, JS)
-    ├── providers/                 # Phase 8: Multi-Cloud Adapters & GitOps Terraform Engine
-    ├── docs/                      # Operations guide & production readiness report
-    └── tests/                     # 288 platform integration and closed-loop tests
+### Setup Environment
+```powershell
+# Create & activate venv
+uv venv --python 3.11 .venv
+.venv\Scripts\activate
+
+# Install dependencies
+uv pip install fastapi uvicorn pydantic pydantic-settings pytest pytest-asyncio httpx websockets sqlalchemy boto3 networkx
+
+# Copy configuration template
+Copy-Item .env.example .env
 ```
 
+### Start Server
+```powershell
+.venv\Scripts\uvicorn.exe app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Diagnostic Endpoints
+- **Liveness Probe**: `GET http://localhost:8000/health/live`
+- **Readiness Probe**: `GET http://localhost:8000/health/ready`
+- **Task Lookup**: `GET http://localhost:8000/api/v1/tasks/{task_id}`
+- **Audit Events**: `GET http://localhost:8000/api/v1/tasks/{task_id}/events`
+- **Diagnostic Simulation**: `POST http://localhost:8000/api/v1/switch/simulate-message`
+- **Swagger Documentation**: `http://localhost:8000/docs`
+
 ---
 
-## Security & Responsible Autonomy
+## 10. Running Tests
 
-CloudPilot operates under a strict principle of **defensive and explainable autonomy**:
-1. **Human Oversight**: High-risk, irreversible, or policy-violating operations are authoritatively gated behind human approval.
-2. **Authoritative Emergency Stop**: Operators can trigger the global or scoped kill switch at any time to instantly freeze autonomous mutating actions.
-3. **Audit Trail**: Every action, policy evaluation, approval decision, and outcome verification is cryptographically linked with SHA-256 hashes.
-4. **AWS Read-Only Safe Start**: AWS integration starts strictly read-only to prevent accidental disruption in production accounts.
+Run all Phase 1 tests (Unit, Integration, Contract):
+```powershell
+.venv\Scripts\pytest.exe tests -v
+```
+**Test Results**: **27 passed in 2.52s**
+
+Run preserved CloudPilot foundation tests:
+```powershell
+.venv\Scripts\pytest.exe docker/tests/test_platform_foundation.py -v
+```
+**Test Results**: **29 passed in 16.59s**
+
+Run code quality & linting:
+```powershell
+ruff check app tests
+```
+**Result**: **All checks passed!**
 
 ---
 
-## License
+## 11. Phase 1 Implementation Scope & Status
 
-This project is licensed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file for details.
+### Implemented & Verified in Phase 1:
+- [x] Complete repository audit and baseline test verification.
+- [x] Modular monolith architecture (`app/core`, `app/domain`, `app/persistence`, `app/integrations`, `app/services`, `app/api`).
+- [x] Strongly typed settings with Pydantic Settings, environment validation, and secret redaction.
+- [x] Structured JSON logging with correlation ID and task ID context tracking.
+- [x] Standard operational liveness and readiness probes (`/health/live`, `/health/ready`).
+- [x] Typed domain contracts (`Task`, `TaskEvent`, `Evidence`).
+- [x] Strict state machine enforcing allowed lifecycle transitions.
+- [x] Thread-safe SQLite persistence with foreign keys and append-only event logging.
+- [x] Documented Switch Agent Protocol wire client (`SwitchWireClient`) with WebSocket streaming and mandatory 2-second heartbeat responses.
+- [x] Fully compliant emulated bridge (`EmulatedSwitchBridge`) for deterministic local testing.
+- [x] Real Switch room collaborative workflow (`cloudpilot-ops`).
+- [x] Comprehensive test suites (27 unit, integration, and contract tests).
+- [x] Preserved legacy multi-cloud code without destructive rewrites.
+
+### Deliberately Deferred to Later Phases (Out of Scope for Phase 1):
+- **Phase 2**: Live AWS/Azure/GCP account discovery & billing API integrations.
+- **Phase 3**: Unified FinOps/SecOps intelligence pipeline & counterfactual simulation.
+- **Phase 4**: Human-in-the-loop approval routing & sandboxed GitOps execution.
+- **Phase 5**: Post-execution outcome verification & deterministic rollback.
+
+---
+
+## 12. Documentation Index
+
+- [Architecture Guide](docs/architecture.md): Deep-dive into modular boundaries, state machines, and Switch centrality.
+- [Switch Integration Guide](docs/switch-integration.md): Wire protocol specification, frame catalog, heartbeat mechanics, and room setup.
+- [Development Setup](docs/development-setup.md): Local environment setup, commands, and troubleshooting.
+- [Configuration Reference](docs/configuration.md): Complete reference for environment variables and secrets.
+- [Testing Guide](docs/testing.md): Automated testing strategy, test layers, and verification commands.
