@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import uuid
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from app.core.errors import TaskNotFoundError
 from app.core.logging import (
@@ -20,6 +20,7 @@ from app.core.logging import (
     set_correlation_id,
     set_task_id,
 )
+from app.domain.decisions import DecisionReport, DecisionRun
 from app.domain.finding import (
     AssessmentSummary,
     Finding,
@@ -35,8 +36,10 @@ from app.domain.models import (
     TaskEventType,
     TaskStatus,
 )
+from app.domain.objectives import PreferenceProfile
 from app.integrations.switch.client import SwitchAdapterInterface
 from app.persistence.repository import TaskRepositoryInterface
+from app.services.decision.decision_orchestrator import DecisionOrchestrator
 from app.services.discovery.engine import InfrastructureDiscoveryEngine
 from app.services.specialists.finops_specialist import FinOpsSpecialist
 from app.services.specialists.secops_specialist import SecOpsSpecialist
@@ -97,12 +100,38 @@ class TaskService:
             redact_secrets(body),
         )
 
-        # Detect if task is an explicit assessment command (e.g. "@cloudpilot-ops-agent assess ./samples/staging ...")
+        # Detect if task is an explicit assessment or decision command
+        is_decision = bool(
+            re.search(r"\b(decide|optimize|optimization|recommend|trade-?off|pareto)\b", body, re.IGNORECASE)
+        )
         is_assessment = bool(
             re.search(r"assess\s+(?:\./|[a-zA-Z0-9_\-\.\/]+)", body, re.IGNORECASE)
             or (frame.get("metadata") and "workspace_root" in frame["metadata"])
         )
-        task_type = "infrastructure_assessment" if is_assessment else "infrastructure_review"
+
+        pref_profile = PreferenceProfile.BALANCED
+        body_lower = body.lower()
+        if "cost" in body_lower or "savings" in body_lower or "cheapest" in body_lower:
+            pref_profile = PreferenceProfile.COST_FIRST
+        elif "security" in body_lower or "secure" in body_lower:
+            pref_profile = PreferenceProfile.SECURITY_FIRST
+        elif "reliability" in body_lower or "sla" in body_lower or "availability" in body_lower:
+            pref_profile = PreferenceProfile.RELIABILITY_FIRST
+
+        if is_decision:
+            task_type = "decision_optimization"
+        elif is_assessment:
+            task_type = "infrastructure_assessment"
+        else:
+            task_type = "infrastructure_review"
+
+        meta = {
+            "origin_message_id": message_id,
+            "sender_name": sender_name,
+            "preference_profile": pref_profile.value,
+        }
+        if frame.get("metadata"):
+            meta.update(frame["metadata"])
 
         return await self.process_task_request(
             title=f"Task from {sender_name}: {body[:40]}...",
@@ -111,7 +140,7 @@ class TaskService:
             requested_by=sender,
             correlation_id=correlation_id,
             task_type=task_type,
-            metadata={"origin_message_id": message_id, "sender_name": sender_name},
+            metadata=meta,
         )
 
     async def process_task_request(
@@ -195,10 +224,36 @@ class TaskService:
                 )
             )
 
-            # Check if this task targets infrastructure assessment
+            # Check if this task targets infrastructure assessment or decision optimization
             workspace_path = self._extract_workspace_path(description, metadata)
 
-            if workspace_path or task_type == "infrastructure_assessment":
+            if task_type == "decision_optimization" or (workspace_path and any(w in description.lower() for w in ["decide", "optimize", "recommend", "pareto"])):
+                # Execute Phase 2 Assessment first, then Phase 3 Decision Intelligence
+                target_dir = workspace_path or "samples/staging"
+                assessment = await self._execute_assessment_workflow(
+                    task=task,
+                    workspace_dir=target_dir,
+                    room_id=room_id,
+                    correlation_id=cid,
+                )
+                decision_run, report = await self._execute_decision_workflow(
+                    task=task,
+                    assessment=assessment,
+                    room_id=room_id,
+                    correlation_id=cid,
+                    metadata=metadata,
+                )
+                rec = decision_run.recommended_candidate
+                execution_summary = (
+                    f"CloudPilot SwitchOps Phase 3 Decision Intelligence Completed for `{target_dir}`.\n"
+                    f"- Decision ID: {decision_run.decision_id}\n"
+                    f"- Z3 Constraint Verification: {decision_run.z3_verification_status}\n"
+                    f"- Candidates: {decision_run.total_candidates_generated} generated | {decision_run.feasible_candidates_count} feasible | {decision_run.rejected_candidates_count} rejected by constraints\n"
+                    f"- Pareto Frontier: {decision_run.pareto_optimal_count} non-dominated alternatives\n"
+                    f"- Recommended Action: {rec.title if rec else 'None (All rejected)'}\n"
+                    f"- Read-only policy strictly enforced: zero modifications made to files or infrastructure."
+                )
+            elif workspace_path or task_type == "infrastructure_assessment":
                 # Execute Phase 2 Intelligence Assessment Workflow
                 target_dir = workspace_path or "samples/staging"
                 assessment = await self._execute_assessment_workflow(
@@ -384,6 +439,45 @@ class TaskService:
 
         return assessment
 
+    async def _execute_decision_workflow(
+        self,
+        task: Task,
+        assessment: AssessmentSummary,
+        room_id: str,
+        correlation_id: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> Tuple[DecisionRun, DecisionReport]:
+        """
+        Coordinates candidate generation, constraint verification (Z3),
+        Pareto frontier calculation, and report publishing in Switch room.
+        """
+        pref_str = (metadata or {}).get("preference_profile", "BALANCED")
+        try:
+            profile = PreferenceProfile(pref_str)
+        except Exception:
+            profile = PreferenceProfile.BALANCED
+
+        start_msg = (
+            f"🧠 **Starting CloudPilot Decision Intelligence Engine**\n"
+            f"- **Target Workspace**: `{assessment.workspace_root}`\n"
+            f"- **Preference Profile**: `{profile.value}`\n"
+            f"- **Policy Invariants**: Non-public databases, persistent volume preservation, budget ceiling\n"
+            f"Generating candidates and validating hard constraints with Z3 SMT solver..."
+        )
+        await self._safe_post_switch_message(room_id, start_msg)
+
+        orchestrator = DecisionOrchestrator(repository=self.repository)
+        decision_run, report = orchestrator.run_decision_analysis(
+            task_id=task.task_id,
+            preference_profile=profile,
+        )
+
+        decision_switch_msg = orchestrator.recommender.format_switch_report(decision_run, report)
+        await self._safe_post_switch_message(room_id, decision_switch_msg)
+
+        task.metadata["decision_id"] = decision_run.decision_id
+        return decision_run, report
+
     def _extract_workspace_path(self, text: str, metadata: dict[str, Any] | None) -> str:
         """Extract workspace path from metadata or explicit path command if it exists."""
         candidate = ""
@@ -394,8 +488,8 @@ class TaskService:
             path_match = re.search(r"(\./[^\s,]+|samples/[^\s,]+)", text)
             if path_match:
                 candidate = path_match.group(1).rstrip(".,;'\"")
-            # Or explicit assess command targeting staging or safe (e.g. "@cloudpilot assess staging")
-            elif re.search(r"\bassess\s+(?:the\s+)?(staging|safe)", text, re.IGNORECASE):
+            # Or explicit command targeting staging or safe (e.g. "@cloudpilot assess staging", "@cloudpilot optimize staging")
+            elif re.search(r"\b(?:assess|decide|optimize)\s+(?:on\s+)?(?:the\s+)?(staging|safe)", text, re.IGNORECASE):
                 sub = "staging" if "staging" in text.lower() else "safe"
                 candidate = f"samples/{sub}"
 

@@ -4,7 +4,9 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Switch AI Native](https://img.shields.io/badge/Switch-Native%20Integration-6366f1.svg)](https://switchagents.ai/)
-[![Tests Passing](https://img.shields.io/badge/Phase%202%20Tests-71%20Passed-brightgreen.svg)](tests/)
+[![Phase 3 Release](https://img.shields.io/badge/Release-v3.0.0--phase3-blue.svg)](https://github.com/shankarsai000/CloudPilot-SwitchOps)
+[![Tests Passing](https://img.shields.io/badge/All%20Tests-94%20Passed-brightgreen.svg)](tests/)
+[![Z3 Solver Verified](https://img.shields.io/badge/Formal%20Verification-Z3%20SMT%20Verified-purple.svg)](docs/constraint-engine.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey.svg)](LICENSE)
 
 > Built for the **Flip the Switch Hackathon — Track 01: Best Business Workflow**  
@@ -146,6 +148,15 @@ flowchart TD
   - `REL-004`: Missing container resource limits (noisy neighbor risk).
   - `REL-005`: Stateful database service missing persistent volume storage.
 
+### D. Decision Intelligence & Multi-Objective Optimization Engine (`app.services.decision`)
+- **Deterministic Candidate Generation**: Generates typed candidate changes (`RESIZE_COMPUTE`, `DOWNGRADE_STORAGE`, `SCHEDULE_DATABASE`, `RESTRICT_INGRESS`, `ENABLE_ENCRYPTION`, `MULTI_AZ_FAILOVER`) from Phase 2 findings.
+- **Hard Constraint Validation**: Enforces mandatory policies (`CONST-OPS-01`, `CONST-SEC-01`..`05`, `CONST-REL-01`, `CONST-FIN-01`).
+- **Formal Z3 SMT Theorem Proving**: Encodes budget inequalities and anti-pattern invariants into Microsoft Z3 (`z3-solver 5.3.3.0`), returning verifiable `Z3_VERIFIED_SAT` / `Z3_VERIFIED_UNSAT` statuses.
+- **True Multi-Objective Pareto Optimization**: Partitions candidates into non-dominated Pareto frontier, strictly dominated, and infeasible sets across Cost, Security, Reliability, and Simplicity.
+- **Operator Preference Profiles**: Ranks Pareto-optimal candidates under `BALANCED`, `COST_FIRST`, `SECURITY_FIRST`, and `RELIABILITY_FIRST` profiles. Hard constraints are immutable and cannot be overridden by preferences.
+- **Conflict & Interaction Detection**: Detects conflicting resource mutations, mutual exclusions, and redundant proposals.
+- **Strict Read-Only Guarantee**: Operates completely in read-only analysis mode with zero file mutations or live cloud write operations.
+
 ---
 
 ## 6. Demonstration Scenarios
@@ -185,34 +196,51 @@ The repository includes realistic infrastructure scenarios in `samples/`:
 .venv\Scripts\uvicorn.exe app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Assessment API Endpoints
+### Assessment & Decision API Endpoints
 - **Run Assessment**: `POST http://localhost:8000/api/v1/assessments/run`
 - **Get Assessment**: `GET http://localhost:8000/api/v1/assessments/{task_id}`
 - **Get Discovered Inventory**: `GET http://localhost:8000/api/v1/assessments/{task_id}/inventory`
 - **Filter Findings**: `GET http://localhost:8000/api/v1/assessments/{task_id}/findings?category=FINOPS&severity=CRITICAL`
 - **Cost Breakdown**: `GET http://localhost:8000/api/v1/assessments/{task_id}/cost-breakdown`
+- **Run Decision Optimization**: `POST http://localhost:8000/api/v1/decisions/run`
+- **Get Decision Run**: `GET http://localhost:8000/api/v1/decisions/{decision_id}`
+- **Get Evaluated Candidates**: `GET http://localhost:8000/api/v1/decisions/{decision_id}/candidates?feasible_only=true`
+- **Get Pareto Frontier**: `GET http://localhost:8000/api/v1/decisions/{decision_id}/pareto`
+- **Get Constraint Violations**: `GET http://localhost:8000/api/v1/decisions/{decision_id}/constraints`
+- **Get Full Decision Report**: `GET http://localhost:8000/api/v1/decisions/{decision_id}/report`
 - **Swagger Documentation**: `http://localhost:8000/docs`
 
 ---
 
 ## 9. Running Tests
 
-Run all Phase 1 and Phase 2 tests (Unit, Integration, Contract):
+Run all Phase 1, Phase 2, and Phase 3 tests (Unit, Integration, Contract):
 ```powershell
 .venv\Scripts\pytest.exe tests -v
 ```
-**Test Results**: **42 passed in 6.06s**
+**Test Results**: **65 passed in 7.52s**
 
 Run complete regression suite including preserved legacy foundation tests:
 ```powershell
 .venv\Scripts\pytest.exe tests docker/tests/test_platform_foundation.py -v
 ```
-**Test Results**: **71 passed in 23.38s (100% passing)**
+**Test Results**: **94 passed in 27.20s (100% passing, 0 failures)**
 
 ---
 
 ## 10. Documentation Index
 
+### Phase 3 Decision Intelligence Specifications
+- [Decision Intelligence Engine](docs/decision-intelligence.md): Seven-stage pipeline, objective scoring, and formal guarantees.
+- [Candidate Generation Engine](docs/candidate-generation.md): Finding-to-candidate derivation, typed mutations, and adversarial tests.
+- [Constraint Engine & Z3 Solver](docs/constraint-engine.md): Hard constraint catalog, Z3 theorem proving, and budget ceilings.
+- [Multi-Objective Pareto Optimization](docs/pareto-optimization.md): Vector dominance mathematics, non-dominated frontier, and preference profiles.
+- [Recommendation Model & Traceability](docs/recommendation-model.md): Executive synthesis, trade-off explanations, and evidence lineage.
+- [Decision REST API Reference](docs/decision-api.md): Detailed endpoint catalog, request/response schemas, and query parameters.
+- [Decision Verification & Testing](docs/decision-testing.md): Test suite matrix, Z3 SAT/UNSAT assertions, and read-only invariants.
+- [Phase 3 Architecture Blueprint](docs/phase3-architecture.md): Component diagrams, domain models, and scope boundaries.
+
+### Phase 1 & 2 Foundations
 - [Architecture Guide](docs/architecture.md): Modular boundaries, domain contracts, and Switch centrality.
 - [Infrastructure Discovery Engine](docs/infrastructure-discovery.md): Filesystem protections, parsers, and normalized schema.
 - [FinOps Intelligence Engine](docs/finops-engine.md): Pricing catalog, Decimal arithmetic, and financial hygiene rules.

@@ -17,6 +17,17 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from app.core.errors import TaskConflictError, TaskNotFoundError
+from app.domain.candidates import Candidate
+from app.domain.decisions import (
+    CandidateEvaluation,
+    CandidateInteraction,
+    DecisionReport,
+    DecisionRun,
+    InteractionType,
+    ParetoStatus,
+)
+from app.domain.objectives import PreferenceProfile
+from app.domain.policies import PolicyConfiguration
 from app.domain.finding import (
     AssessmentSummary,
     Finding,
@@ -112,6 +123,50 @@ class TaskRepositoryInterface(ABC):
     def get_assessment_for_task(self, task_id: str) -> AssessmentSummary | None:
         """Retrieve consolidated assessment summary for a task."""
 
+    @abstractmethod
+    def save_decision_run(self, decision: DecisionRun) -> DecisionRun:
+        """Persist a decision intelligence run."""
+
+    @abstractmethod
+    def get_decision_run(self, decision_id: str) -> DecisionRun | None:
+        """Retrieve a decision run by its decision_id."""
+
+    @abstractmethod
+    def get_decision_run_for_task(self, task_id: str) -> DecisionRun | None:
+        """Retrieve a decision run associated with a task."""
+
+    @abstractmethod
+    def save_candidate_evaluations(
+        self, decision_id: str, evaluations: list[CandidateEvaluation]
+    ) -> None:
+        """Persist candidate evaluations for a decision run."""
+
+    @abstractmethod
+    def get_candidate_evaluations(
+        self, decision_id: str
+    ) -> list[CandidateEvaluation]:
+        """Retrieve all candidate evaluations for a decision run."""
+
+    @abstractmethod
+    def save_interactions(
+        self, decision_id: str, interactions: list[CandidateInteraction]
+    ) -> None:
+        """Persist candidate interactions/conflicts for a decision run."""
+
+    @abstractmethod
+    def get_interactions(
+        self, decision_id: str
+    ) -> list[CandidateInteraction]:
+        """Retrieve candidate interactions/conflicts for a decision run."""
+
+    @abstractmethod
+    def save_decision_report(self, report: DecisionReport) -> DecisionReport:
+        """Persist a consolidated engineering decision report."""
+
+    @abstractmethod
+    def get_decision_report(self, decision_id: str) -> DecisionReport | None:
+        """Retrieve a decision report by its decision_id."""
+
 
 class InMemoryTaskRepository(TaskRepositoryInterface):
     """Fast, thread-safe in-memory repository for unit testing."""
@@ -125,6 +180,11 @@ class InMemoryTaskRepository(TaskRepositoryInterface):
         self._findings_by_id: dict[str, Finding] = {}
         self._inventories: dict[str, InfrastructureInventory] = {}
         self._assessments: dict[str, AssessmentSummary] = {}
+        self._decision_runs: dict[str, DecisionRun] = {}
+        self._decision_runs_by_task: dict[str, str] = {}
+        self._evaluations_by_decision: dict[str, list[CandidateEvaluation]] = {}
+        self._interactions_by_decision: dict[str, list[CandidateInteraction]] = {}
+        self._decision_reports: dict[str, DecisionReport] = {}
 
     def save_task(self, task: Task) -> Task:
         with self._lock:
@@ -235,6 +295,64 @@ class InMemoryTaskRepository(TaskRepositoryInterface):
         with self._lock:
             asm = self._assessments.get(task_id)
             return asm.model_copy(deep=True) if asm else None
+
+    def save_decision_run(self, decision: DecisionRun) -> DecisionRun:
+        with self._lock:
+            self._decision_runs[decision.decision_id] = decision.model_copy(deep=True)
+            self._decision_runs_by_task[decision.task_id] = decision.decision_id
+            return decision.model_copy(deep=True)
+
+    def get_decision_run(self, decision_id: str) -> DecisionRun | None:
+        with self._lock:
+            run = self._decision_runs.get(decision_id)
+            return run.model_copy(deep=True) if run else None
+
+    def get_decision_run_for_task(self, task_id: str) -> DecisionRun | None:
+        with self._lock:
+            dec_id = self._decision_runs_by_task.get(task_id)
+            if not dec_id:
+                return None
+            return self.get_decision_run(dec_id)
+
+    def save_candidate_evaluations(
+        self, decision_id: str, evaluations: list[CandidateEvaluation]
+    ) -> None:
+        with self._lock:
+            self._evaluations_by_decision[decision_id] = [
+                e.model_copy(deep=True) for e in evaluations
+            ]
+
+    def get_candidate_evaluations(
+        self, decision_id: str
+    ) -> list[CandidateEvaluation]:
+        with self._lock:
+            evals = self._evaluations_by_decision.get(decision_id, [])
+            return [e.model_copy(deep=True) for e in evals]
+
+    def save_interactions(
+        self, decision_id: str, interactions: list[CandidateInteraction]
+    ) -> None:
+        with self._lock:
+            self._interactions_by_decision[decision_id] = [
+                i.model_copy(deep=True) for i in interactions
+            ]
+
+    def get_interactions(
+        self, decision_id: str
+    ) -> list[CandidateInteraction]:
+        with self._lock:
+            ints = self._interactions_by_decision.get(decision_id, [])
+            return [i.model_copy(deep=True) for i in ints]
+
+    def save_decision_report(self, report: DecisionReport) -> DecisionReport:
+        with self._lock:
+            self._decision_reports[report.decision_id] = report.model_copy(deep=True)
+            return report.model_copy(deep=True)
+
+    def get_decision_report(self, decision_id: str) -> DecisionReport | None:
+        with self._lock:
+            rep = self._decision_reports.get(decision_id)
+            return rep.model_copy(deep=True) if rep else None
 
     def close(self) -> None:
         pass
@@ -398,6 +516,66 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_assessments_task_id ON assessments(task_id);
+
+                CREATE TABLE IF NOT EXISTS decision_runs (
+                    decision_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    assessment_id TEXT NOT NULL,
+                    workspace_root TEXT NOT NULL,
+                    policy_config_json TEXT NOT NULL,
+                    preference_profile TEXT NOT NULL,
+                    total_candidates_generated INTEGER NOT NULL,
+                    feasible_candidates_count INTEGER NOT NULL,
+                    rejected_candidates_count INTEGER NOT NULL,
+                    pareto_optimal_count INTEGER NOT NULL,
+                    recommended_candidate_id TEXT,
+                    recommended_candidate_json TEXT,
+                    executive_summary TEXT NOT NULL,
+                    trade_off_analysis TEXT NOT NULL,
+                    z3_verification_status TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    schema_version TEXT NOT NULL,
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_decisions_task_id ON decision_runs(task_id);
+
+                CREATE TABLE IF NOT EXISTS candidate_evaluations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    decision_id TEXT NOT NULL,
+                    candidate_id TEXT NOT NULL,
+                    evaluation_json TEXT NOT NULL,
+                    is_feasible INTEGER NOT NULL,
+                    pareto_status TEXT NOT NULL,
+                    FOREIGN KEY(decision_id) REFERENCES decision_runs(decision_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_evals_decision_id ON candidate_evaluations(decision_id);
+
+                CREATE TABLE IF NOT EXISTS candidate_interactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    decision_id TEXT NOT NULL,
+                    candidate_ids_json TEXT NOT NULL,
+                    interaction_type TEXT NOT NULL,
+                    conflicting_resource_id TEXT,
+                    reason TEXT NOT NULL,
+                    FOREIGN KEY(decision_id) REFERENCES decision_runs(decision_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_interactions_decision_id ON candidate_interactions(decision_id);
+
+                CREATE TABLE IF NOT EXISTS decision_reports (
+                    decision_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    assessment_id TEXT NOT NULL,
+                    report_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    schema_version TEXT NOT NULL,
+                    FOREIGN KEY(decision_id) REFERENCES decision_runs(decision_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_reports_decision_id ON decision_reports(decision_id);
                 """
             )
             conn.commit()
@@ -727,6 +905,164 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
                 return None
             return self._row_to_assessment(row)
 
+    def save_decision_run(self, decision: DecisionRun) -> DecisionRun:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO decision_runs (
+                    decision_id, task_id, assessment_id, workspace_root,
+                    policy_config_json, preference_profile,
+                    total_candidates_generated, feasible_candidates_count,
+                    rejected_candidates_count, pareto_optimal_count,
+                    recommended_candidate_id, recommended_candidate_json,
+                    executive_summary, trade_off_analysis,
+                    z3_verification_status, status, created_at, schema_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    decision.decision_id,
+                    decision.task_id,
+                    decision.assessment_id,
+                    decision.workspace_root,
+                    decision.policy_config.model_dump_json(),
+                    decision.preference_profile.value,
+                    decision.total_candidates_generated,
+                    decision.feasible_candidates_count,
+                    decision.rejected_candidates_count,
+                    decision.pareto_optimal_count,
+                    decision.recommended_candidate_id,
+                    decision.recommended_candidate.model_dump_json() if decision.recommended_candidate else None,
+                    decision.executive_summary,
+                    decision.trade_off_analysis,
+                    decision.z3_verification_status,
+                    decision.status,
+                    decision.created_at.isoformat(),
+                    decision.schema_version,
+                ),
+            )
+            conn.commit()
+            return decision
+
+    def get_decision_run(self, decision_id: str) -> DecisionRun | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM decision_runs WHERE decision_id = ?",
+                (decision_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_decision_run(row)
+
+    def get_decision_run_for_task(self, task_id: str) -> DecisionRun | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM decision_runs WHERE task_id = ? ORDER BY created_at DESC LIMIT 1",
+                (task_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_decision_run(row)
+
+    def save_candidate_evaluations(
+        self, decision_id: str, evaluations: list[CandidateEvaluation]
+    ) -> None:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM candidate_evaluations WHERE decision_id = ?", (decision_id,))
+            for ev in evaluations:
+                cursor.execute(
+                    """
+                    INSERT INTO candidate_evaluations (
+                        decision_id, candidate_id, evaluation_json, is_feasible, pareto_status
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        decision_id,
+                        ev.candidate.candidate_id,
+                        ev.model_dump_json(),
+                        1 if ev.is_feasible else 0,
+                        ev.pareto_status.value,
+                    ),
+                )
+            conn.commit()
+
+    def get_candidate_evaluations(
+        self, decision_id: str
+    ) -> list[CandidateEvaluation]:
+        with self._lock, self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM candidate_evaluations WHERE decision_id = ?",
+                (decision_id,),
+            ).fetchall()
+            return [self._row_to_candidate_evaluation(r) for r in rows]
+
+    def save_interactions(
+        self, decision_id: str, interactions: list[CandidateInteraction]
+    ) -> None:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM candidate_interactions WHERE decision_id = ?", (decision_id,))
+            for inter in interactions:
+                cursor.execute(
+                    """
+                    INSERT INTO candidate_interactions (
+                        decision_id, candidate_ids_json, interaction_type,
+                        conflicting_resource_id, reason
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        decision_id,
+                        json.dumps(inter.candidate_ids),
+                        inter.interaction_type.value,
+                        inter.conflicting_resource_id,
+                        inter.reason,
+                    ),
+                )
+            conn.commit()
+
+    def get_interactions(
+        self, decision_id: str
+    ) -> list[CandidateInteraction]:
+        with self._lock, self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM candidate_interactions WHERE decision_id = ?",
+                (decision_id,),
+            ).fetchall()
+            return [self._row_to_candidate_interaction(r) for r in rows]
+
+    def save_decision_report(self, report: DecisionReport) -> DecisionReport:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO decision_reports (
+                    decision_id, task_id, assessment_id, report_json,
+                    created_at, schema_version
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    report.decision_id,
+                    report.task_id,
+                    report.assessment_id,
+                    report.model_dump_json(),
+                    report.created_at.isoformat(),
+                    report.schema_version,
+                ),
+            )
+            conn.commit()
+            return report
+
+    def get_decision_report(self, decision_id: str) -> DecisionReport | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM decision_reports WHERE decision_id = ?",
+                (decision_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_decision_report(row)
+
     def _row_to_task(self, row: sqlite3.Row) -> Task:
         return Task(
             task_id=row["task_id"],
@@ -827,3 +1163,42 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
             created_at=datetime.fromisoformat(row["created_at"]),
             schema_version=row["schema_version"],
         )
+
+    def _row_to_decision_run(self, row: sqlite3.Row) -> DecisionRun:
+        rec_cand = None
+        if row["recommended_candidate_json"]:
+            rec_cand = Candidate.model_validate_json(row["recommended_candidate_json"])
+        return DecisionRun(
+            decision_id=row["decision_id"],
+            task_id=row["task_id"],
+            assessment_id=row["assessment_id"],
+            workspace_root=row["workspace_root"],
+            policy_config=PolicyConfiguration.model_validate_json(row["policy_config_json"]),
+            preference_profile=PreferenceProfile(row["preference_profile"]),
+            total_candidates_generated=row["total_candidates_generated"],
+            feasible_candidates_count=row["feasible_candidates_count"],
+            rejected_candidates_count=row["rejected_candidates_count"],
+            pareto_optimal_count=row["pareto_optimal_count"],
+            recommended_candidate_id=row["recommended_candidate_id"],
+            recommended_candidate=rec_cand,
+            executive_summary=row["executive_summary"],
+            trade_off_analysis=row["trade_off_analysis"],
+            z3_verification_status=row["z3_verification_status"],
+            status=row["status"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            schema_version=row["schema_version"],
+        )
+
+    def _row_to_candidate_evaluation(self, row: sqlite3.Row) -> CandidateEvaluation:
+        return CandidateEvaluation.model_validate_json(row["evaluation_json"])
+
+    def _row_to_candidate_interaction(self, row: sqlite3.Row) -> CandidateInteraction:
+        return CandidateInteraction(
+            candidate_ids=json.loads(row["candidate_ids_json"]),
+            interaction_type=InteractionType(row["interaction_type"]),
+            conflicting_resource_id=row["conflicting_resource_id"],
+            reason=row["reason"],
+        )
+
+    def _row_to_decision_report(self, row: sqlite3.Row) -> DecisionReport:
+        return DecisionReport.model_validate_json(row["report_json"])

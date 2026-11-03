@@ -39,6 +39,11 @@ from app.api.assessments import (
     get_task_service as assessments_get_service,
     router as assessments_router,
 )
+from app.api.decisions import (
+    get_repository as decisions_get_repo,
+    get_task_service as decisions_get_service,
+    router as decisions_router,
+)
 from app.core.config import Settings, get_settings
 from app.core.errors import CloudPilotError
 from app.core.logging import (
@@ -115,6 +120,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.dependency_overrides[tasks_get_service] = get_task_service
     app.dependency_overrides[assessments_get_repo] = get_repository
     app.dependency_overrides[assessments_get_service] = get_task_service
+    app.dependency_overrides[decisions_get_repo] = get_repository
+    app.dependency_overrides[decisions_get_service] = get_task_service
 
     # 5. Start background listener if live Switch connection is available
     if isinstance(_switch_adapter, SwitchWireClient) and settings.switch_agent_api_key:
@@ -188,6 +195,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(tasks_router)
     app.include_router(assessments_router)
+    app.include_router(decisions_router)
 
     return app
 
