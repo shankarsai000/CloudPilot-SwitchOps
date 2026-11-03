@@ -35,6 +35,7 @@ class CandidateType(str, Enum):
     SET_RESOURCE_LIMITS = "SET_RESOURCE_LIMITS"
     MULTI_AZ_FAILOVER = "MULTI_AZ_FAILOVER"
     MULTI_AZ_DEPLOYMENT = "MULTI_AZ_FAILOVER"
+    COMPOSITE_PLAN = "COMPOSITE_PLAN"      # Bounded combination of multiple compatible candidates
     DROP_PERSISTENCE = "DROP_PERSISTENCE"  # Deliberate anti-pattern candidate for testing rejection
     DISABLE_AUTH = "DISABLE_AUTH"          # Deliberate anti-pattern candidate for testing rejection
     OTHER = "OTHER"
@@ -102,7 +103,12 @@ class Candidate(BaseModel):
     evidence: Dict[str, Any] = Field(default_factory=dict)
     applicability: ApplicabilityStatus = Field(default=ApplicabilityStatus.APPLICABLE)
     reversibility: str = Field(default="HIGH", description="HIGH, MEDIUM, LOW")
-    schema_version: str = Field(default="1.0")
+    member_candidate_ids: List[str] = Field(default_factory=list, description="IDs of component candidates if COMPOSITE_PLAN")
+    assessment_id: Optional[str] = Field(default=None, description="Assessment provenance reference")
+    pricing_catalog_version: str = Field(default="1.0")
+    policy_version: str = Field(default="1.0")
+    objective_model_version: str = Field(default="1.1")
+    schema_version: str = Field(default="1.1")
 
     @field_validator(
         "estimated_monthly_cost_before",

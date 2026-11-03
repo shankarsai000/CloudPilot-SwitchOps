@@ -4,9 +4,10 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Switch AI Native](https://img.shields.io/badge/Switch-Native%20Integration-6366f1.svg)](https://switchagents.ai/)
-[![Phase 3 Release](https://img.shields.io/badge/Release-v3.0.0--phase3-blue.svg)](https://github.com/shankarsai000/CloudPilot-SwitchOps)
-[![Tests Passing](https://img.shields.io/badge/All%20Tests-94%20Passed-brightgreen.svg)](tests/)
+[![Phase 3.1 Release](https://img.shields.io/badge/Release-v3.1.0--phase3--hardening-blue.svg)](https://github.com/shankarsai000/CloudPilot-SwitchOps)
+[![Tests Passing](https://img.shields.io/badge/All%20Tests-118%20Passed-brightgreen.svg)](tests/)
 [![Z3 Solver Verified](https://img.shields.io/badge/Formal%20Verification-Z3%20SMT%20Verified-purple.svg)](docs/constraint-engine.md)
+[![SHA-256 Provenance](https://img.shields.io/badge/Evidence%20Provenance-SHA--256%20Verified-teal.svg)](docs/recommendation-model.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey.svg)](LICENSE)
 
 > Built for the **Flip the Switch Hackathon — Track 01: Best Business Workflow**  
@@ -148,13 +149,15 @@ flowchart TD
   - `REL-004`: Missing container resource limits (noisy neighbor risk).
   - `REL-005`: Stateful database service missing persistent volume storage.
 
-### D. Decision Intelligence & Multi-Objective Optimization Engine (`app.services.decision`)
+### D. Decision Intelligence, Bounded Optimization & Formal Verification (`app.services.decision`)
 - **Deterministic Candidate Generation**: Generates typed candidate changes (`RESIZE_COMPUTE`, `DOWNGRADE_STORAGE`, `SCHEDULE_DATABASE`, `RESTRICT_INGRESS`, `ENABLE_ENCRYPTION`, `MULTI_AZ_FAILOVER`) from Phase 2 findings.
-- **Hard Constraint Validation**: Enforces mandatory policies (`CONST-OPS-01`, `CONST-SEC-01`..`05`, `CONST-REL-01`, `CONST-FIN-01`).
-- **Formal Z3 SMT Theorem Proving**: Encodes budget inequalities and anti-pattern invariants into Microsoft Z3 (`z3-solver 5.3.3.0`), returning verifiable `Z3_VERIFIED_SAT` / `Z3_VERIFIED_UNSAT` statuses.
-- **True Multi-Objective Pareto Optimization**: Partitions candidates into non-dominated Pareto frontier, strictly dominated, and infeasible sets across Cost, Security, Reliability, and Simplicity.
-- **Operator Preference Profiles**: Ranks Pareto-optimal candidates under `BALANCED`, `COST_FIRST`, `SECURITY_FIRST`, and `RELIABILITY_FIRST` profiles. Hard constraints are immutable and cannot be overridden by preferences.
-- **Conflict & Interaction Detection**: Detects conflicting resource mutations, mutual exclusions, and redundant proposals.
+- **Bounded Combination Optimization ($k \le 3$)**: Evaluates both atomic candidates and compatible multi-candidate combinations (`COMPOSITE_PLAN`). Enforces deterministic enumeration, pairwise conflict rejection, dependency closure, and Decimal monetary aggregation.
+- **Hard Constraint Validation**: Enforces non-negotiable operational boundaries (`CONST-OPS-01`, `CONST-SEC-01`..`05`, `CONST-REL-01`, `CONST-FIN-01`).
+- **Formal Z3 SMT Theorem Proving**: Encodes budget inequalities, mandatory security/persistence invariants, and interaction exclusions into Microsoft Z3 (`z3-solver 5.3.3.0`), returning standardized `Z3_CONSTRAINTS_SAT`, `Z3_CONSTRAINTS_UNSAT`, `Z3_UNKNOWN`, or `Z3_UNAVAILABLE` statuses.
+- **Multi-Objective Scoring (Model v1.1)**: Strictly normalized and clamped `[0.0, 100.0]` scoring across Cost, Security, Reliability, and Simplicity. Robust to negative savings (cost additions) and zero-baseline environments.
+- **True Multi-Objective Pareto Optimization**: Partitions candidates into non-dominated Pareto frontier, strictly dominated, and infeasible sets without artificial pre-scalarization.
+- **Operator Preference Profiles**: Ranks Pareto-optimal candidates under `BALANCED`, `COST_FIRST`, `SECURITY_FIRST`, and `RELIABILITY_FIRST` profiles. Hard constraints can never be overridden by preferences.
+- **Tamper-Proof SHA-256 Evidence Provenance**: Generates cryptographic-grade SHA-256 digests over all decision inputs, findings, and policies with independent verification utility.
 - **Strict Read-Only Guarantee**: Operates completely in read-only analysis mode with zero file mutations or live cloud write operations.
 
 ---
@@ -214,17 +217,17 @@ The repository includes realistic infrastructure scenarios in `samples/`:
 
 ## 9. Running Tests
 
-Run all Phase 1, Phase 2, and Phase 3 tests (Unit, Integration, Contract):
+Run all Phase 1, Phase 2, Phase 3, and Phase 3.1 Hardened tests (Unit, Integration, Contract, Formal SMT):
 ```powershell
 .venv\Scripts\pytest.exe tests -v
 ```
-**Test Results**: **65 passed in 7.52s**
+**Test Results**: **89 passed in 8.35s**
 
 Run complete regression suite including preserved legacy foundation tests:
 ```powershell
 .venv\Scripts\pytest.exe tests docker/tests/test_platform_foundation.py -v
 ```
-**Test Results**: **94 passed in 27.20s (100% passing, 0 failures)**
+**Test Results**: **118 passed in 27.09s (100% passing, 0 failures)**
 
 ---
 

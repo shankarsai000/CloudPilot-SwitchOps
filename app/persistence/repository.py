@@ -533,6 +533,8 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
                     executive_summary TEXT NOT NULL,
                     trade_off_analysis TEXT NOT NULL,
                     z3_verification_status TEXT NOT NULL,
+                    optimization_scope TEXT DEFAULT 'BOUNDED_COMBINATION (k=3)',
+                    objective_model_version TEXT DEFAULT '1.1',
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     schema_version TEXT NOT NULL,
@@ -579,6 +581,17 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
                 """
             )
             conn.commit()
+
+            # Ensure Phase 3.1 columns exist for backward-compatible databases
+            for col_sql in (
+                "ALTER TABLE decision_runs ADD COLUMN optimization_scope TEXT DEFAULT 'BOUNDED_COMBINATION (k=3)'",
+                "ALTER TABLE decision_runs ADD COLUMN objective_model_version TEXT DEFAULT '1.1'",
+            ):
+                try:
+                    conn.execute(col_sql)
+                    conn.commit()
+                except sqlite3.OperationalError:
+                    pass
 
     def save_task(self, task: Task) -> Task:
         with self._lock, self._get_connection() as conn:
@@ -917,8 +930,9 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
                     rejected_candidates_count, pareto_optimal_count,
                     recommended_candidate_id, recommended_candidate_json,
                     executive_summary, trade_off_analysis,
-                    z3_verification_status, status, created_at, schema_version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    z3_verification_status, optimization_scope, objective_model_version,
+                    status, created_at, schema_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     decision.decision_id,
@@ -936,6 +950,8 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
                     decision.executive_summary,
                     decision.trade_off_analysis,
                     decision.z3_verification_status,
+                    getattr(decision, "optimization_scope", "BOUNDED_COMBINATION (k=3)"),
+                    getattr(decision, "objective_model_version", "1.1"),
                     decision.status,
                     decision.created_at.isoformat(),
                     decision.schema_version,
@@ -1168,6 +1184,8 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
         rec_cand = None
         if row["recommended_candidate_json"]:
             rec_cand = Candidate.model_validate_json(row["recommended_candidate_json"])
+        opt_scope = row["optimization_scope"] if "optimization_scope" in row.keys() else "BOUNDED_COMBINATION (k=3)"
+        obj_version = row["objective_model_version"] if "objective_model_version" in row.keys() else "1.1"
         return DecisionRun(
             decision_id=row["decision_id"],
             task_id=row["task_id"],
@@ -1184,6 +1202,8 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
             executive_summary=row["executive_summary"],
             trade_off_analysis=row["trade_off_analysis"],
             z3_verification_status=row["z3_verification_status"],
+            optimization_scope=opt_scope,
+            objective_model_version=obj_version,
             status=row["status"],
             created_at=datetime.fromisoformat(row["created_at"]),
             schema_version=row["schema_version"],

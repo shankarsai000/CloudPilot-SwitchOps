@@ -69,7 +69,7 @@ async def test_end_to_end_switch_decision_workflow(tmp_path: Path) -> None:
     assert run.rejected_candidates_count > 0
     assert run.pareto_optimal_count > 0
     assert run.recommended_candidate_id is not None
-    assert run.z3_verification_status in ["Z3_VERIFIED_SAT", "Z3_FALLBACK"]
+    assert run.z3_verification_status in ["Z3_CONSTRAINTS_SAT", "Z3_VERIFIED_SAT", "Z3_UNAVAILABLE", "Z3_FALLBACK"]
 
     # Verify evaluated candidates in repository
     evals = repo.get_candidate_evaluations(decision_id)

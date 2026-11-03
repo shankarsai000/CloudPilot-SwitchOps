@@ -33,13 +33,14 @@ class ExplanationEngine:
         c = recommended.candidate
         s = recommended.objective_scores
 
+        w_str = f"Weighted Utility: {recommended.weighted_score:.2f} under `{preference_profile.value}`" if recommended.weighted_score is not None else f"Profile: `{preference_profile.value}`"
         lines = [
             f"**Recommended Option**: `{c.title}` (`{c.candidate_id}`)",
             f"- **Core Value Proposition**: {c.description}",
             f"- **Estimated Monthly Savings**: **${c.estimated_monthly_savings} USD** (Cost after: ${c.estimated_monthly_cost_after}/mo)",
             f"- **Security Impact**: `{c.security_impact.value}` | **Reliability Impact**: `{c.reliability_impact.value}`",
             f"- **Operational Complexity**: `{c.operational_complexity.value}` (Reversibility: `{c.reversibility}`)",
-            f"- **Objective Profile**: Cost={s.cost_score:.1f} | Security={s.security_score:.1f} | Reliability={s.reliability_score:.1f} | Simplicity={s.simplicity_score:.1f} (Weighted Utility: {recommended.weighted_score:.2f} under `{preference_profile.value}`)",
+            f"- **Objective Profile**: Cost={s.cost_score:.1f} | Security={s.security_score:.1f} | Reliability={s.reliability_score:.1f} | Simplicity={s.simplicity_score:.1f} ({w_str})",
         ]
         return "\n".join(lines)
 

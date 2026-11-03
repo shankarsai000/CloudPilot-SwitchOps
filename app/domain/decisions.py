@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 import uuid
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.domain.candidates import Candidate
 from app.domain.constraints import ConstraintResult
@@ -74,7 +74,9 @@ class DecisionRun(BaseModel):
     recommended_candidate: Optional[Candidate] = None
     executive_summary: str = ""
     trade_off_analysis: str = ""
-    z3_verification_status: str = Field(default="NOT_RUN", description="Z3_VERIFIED_SAT, Z3_VERIFIED_UNSAT, Z3_FALLBACK")
+    z3_verification_status: str = Field(default="RULE_ENGINE_VALIDATED", description="RULE_ENGINE_VALIDATED, Z3_CONSTRAINTS_SAT, Z3_CONSTRAINTS_UNSAT, Z3_UNKNOWN, Z3_UNAVAILABLE")
+    optimization_scope: str = Field(default="BOUNDED_COMBINATION (k=3)")
+    objective_model_version: str = Field(default="1.1")
     status: str = Field(default="COMPLETED", description="COMPLETED, NO_FEASIBLE_CANDIDATE, FAILED")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     schema_version: str = Field(default="1.0")
@@ -107,6 +109,10 @@ class DecisionReport(BaseModel):
     candidate_interactions: List[CandidateInteraction] = Field(default_factory=list)
     trade_offs_summary: str = ""
     assumptions_and_uncertainty: List[str] = Field(default_factory=list)
+    optimization_scope: str = Field(default="BOUNDED_COMBINATION (k=3)")
+    objective_model_version: str = Field(default="1.1")
+    provenance_hash: Optional[str] = Field(default=None, description="SHA256 hash of immutable decision inputs and findings")
+    evidence_provenance: Dict[str, Any] = Field(default_factory=dict)
     evidence_lineage: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     schema_version: str = Field(default="1.0")
@@ -117,3 +123,13 @@ class DecisionReport(BaseModel):
         if v.tzinfo is None:
             return v.replace(tzinfo=timezone.utc)
         return v.astimezone(timezone.utc)
+
+    @model_validator(mode="before")
+    @classmethod
+    def sync_provenance_and_lineage(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "evidence_provenance" in data and "evidence_lineage" not in data:
+                data["evidence_lineage"] = data["evidence_provenance"]
+            elif "evidence_lineage" in data and "evidence_provenance" not in data:
+                data["evidence_provenance"] = data["evidence_lineage"]
+        return data

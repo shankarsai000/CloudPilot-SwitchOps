@@ -160,6 +160,13 @@ class TaskService:
         set_correlation_id(cid)
 
         # 1. Initialize Task in RECEIVED state
+        task_meta = dict(metadata or {})
+        if "switch_execution_mode" not in task_meta:
+            if hasattr(self.switch_adapter, "bridge_url"):
+                task_meta["switch_execution_mode"] = "LIVE_WIRE"
+            else:
+                task_meta["switch_execution_mode"] = "EMULATED_BRIDGE"
+
         task = Task(
             task_type=task_type,
             title=title,
@@ -168,7 +175,7 @@ class TaskService:
             requested_by=requested_by,
             status=TaskStatus.RECEIVED,
             correlation_id=cid,
-            metadata=metadata or {},
+            metadata=task_meta,
         )
         set_task_id(task.task_id)
 
@@ -208,7 +215,7 @@ class TaskService:
                 f"- **Correlation ID**: `{cid}`\n"
                 f"Proceeding to evaluate operational boundary..."
             )
-            await self._safe_post_switch_message(room_id, ack_message)
+            await self._safe_post_switch_message(room_id, ack_message, task=task)
 
             # 3. Transition to IN_PROGRESS
             task.transition_to(TaskStatus.IN_PROGRESS)
@@ -291,7 +298,7 @@ class TaskService:
                     f"{execution_summary}\n\n"
                     f"*Audit trail persisted with {len(self.repository.get_events_for_task(task.task_id))} events.*"
                 )
-                await self._safe_post_switch_message(room_id, report_message)
+                await self._safe_post_switch_message(room_id, report_message, task=task)
 
             # 5. Transition to COMPLETED
             task.transition_to(TaskStatus.COMPLETED)
@@ -331,7 +338,7 @@ class TaskService:
                     f"**[CloudPilot SwitchOps]** Task `{task.task_id}` FAILED: {exc!s}\n"
                     f"- Status: `FAILED`\n- Correlation ID: `{cid}`"
                 )
-                await self._safe_post_switch_message(room_id, err_msg)
+                await self._safe_post_switch_message(room_id, err_msg, task=task)
             raise
 
     async def _execute_assessment_workflow(
@@ -351,7 +358,7 @@ class TaskService:
             f"- **Mode**: Read-only assessment (zero modifications)\n"
             f"Scanning for Terraform (`*.tf`) and Docker Compose definitions..."
         )
-        await self._safe_post_switch_message(room_id, start_msg)
+        await self._safe_post_switch_message(room_id, start_msg, task=task)
 
         # Step B: Run Discovery Engine
         inventory = self.discovery_engine.discover(
@@ -367,7 +374,7 @@ class TaskService:
             f"- **Scan Duration**: {inventory.discovery_duration_ms:.1f}ms\n"
             f"Dispatching specialist agents: `finops-specialist`, `secops-specialist`..."
         )
-        await self._safe_post_switch_message(room_id, disc_msg)
+        await self._safe_post_switch_message(room_id, disc_msg, task=task)
 
         # Step C: FinOps Specialist evaluation
         finops_res = self.finops_specialist.analyze(inventory=inventory, task_id=task.task_id)
@@ -375,7 +382,7 @@ class TaskService:
             self.repository.save_finding(f)
 
         finops_switch_msg = self.finops_specialist.format_switch_message(finops_res)
-        await self._safe_post_switch_message(room_id, finops_switch_msg)
+        await self._safe_post_switch_message(room_id, finops_switch_msg, task=task)
 
         # Step D: SecOps Specialist evaluation
         secops_res = self.secops_specialist.analyze(inventory=inventory, task_id=task.task_id)
@@ -383,7 +390,7 @@ class TaskService:
             self.repository.save_finding(f)
 
         secops_switch_msg = self.secops_specialist.format_switch_message(secops_res)
-        await self._safe_post_switch_message(room_id, secops_switch_msg)
+        await self._safe_post_switch_message(room_id, secops_switch_msg, task=task)
 
         # Step E: Compile Assessment Summary
         all_findings = finops_res.findings + secops_res.all_findings
@@ -435,7 +442,7 @@ class TaskService:
             + "\n".join(f"- {rec}" for rec in next_recommendations)
             + f"\n\n*All {len(all_findings)} finding(s) persisted with reproducible evidence records.*"
         )
-        await self._safe_post_switch_message(room_id, consolidated_report)
+        await self._safe_post_switch_message(room_id, consolidated_report, task=task)
 
         return assessment
 
@@ -464,7 +471,7 @@ class TaskService:
             f"- **Policy Invariants**: Non-public databases, persistent volume preservation, budget ceiling\n"
             f"Generating candidates and validating hard constraints with Z3 SMT solver..."
         )
-        await self._safe_post_switch_message(room_id, start_msg)
+        await self._safe_post_switch_message(room_id, start_msg, task=task)
 
         orchestrator = DecisionOrchestrator(repository=self.repository)
         decision_run, report = orchestrator.run_decision_analysis(
@@ -472,10 +479,17 @@ class TaskService:
             preference_profile=profile,
         )
 
-        decision_switch_msg = orchestrator.recommender.format_switch_report(decision_run, report)
-        await self._safe_post_switch_message(room_id, decision_switch_msg)
-
+        # Truth-preserving metadata annotations
         task.metadata["decision_id"] = decision_run.decision_id
+        task.metadata["decision_status"] = decision_run.status
+        task.metadata["optimization_scope"] = decision_run.optimization_scope
+        task.metadata["z3_verification_status"] = decision_run.z3_verification_status
+        task.metadata["provenance_hash"] = report.provenance_hash
+
+        # Report is posted ONLY upon successful completion of decision analysis
+        decision_switch_msg = orchestrator.recommender.format_switch_report(decision_run, report)
+        await self._safe_post_switch_message(room_id, decision_switch_msg, task=task)
+
         return decision_run, report
 
     def _extract_workspace_path(self, text: str, metadata: dict[str, Any] | None) -> str:
@@ -498,16 +512,32 @@ class TaskService:
 
         return ""
 
-    async def _safe_post_switch_message(self, room_id: str, content: str) -> None:
-        """Post a message to the Switch room, logging errors if connection is degraded."""
+    async def _safe_post_switch_message(
+        self,
+        room_id: str,
+        content: str,
+        task: Optional[Task] = None,
+    ) -> None:
+        """
+        Post a message to the Switch room, truthfully surfacing delivery errors in task metadata.
+        """
         try:
             await self.switch_adapter.post_message(room_id=room_id, content=content)
+            if task:
+                task.metadata["switch_delivery_status"] = "DELIVERED"
         except Exception as err:
             logger.warning(
                 "Unable to post message to Switch room '%s' (bridge may be offline): %s",
                 room_id,
                 err,
             )
+            if task:
+                task.metadata["switch_delivery_status"] = "FAILED"
+                task.metadata["switch_delivery_error"] = str(err)
+                try:
+                    self.repository.update_task(task)
+                except Exception:
+                    pass
 
     def get_task(self, task_id: str) -> Task:
         """Retrieve task by ID or raise TaskNotFoundError."""

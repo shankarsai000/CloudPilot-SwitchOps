@@ -33,7 +33,10 @@ class ObjectiveCalculator:
     """
 
     def __init__(self, baseline_monthly_cost: Decimal = Decimal("212.83")) -> None:
-        self.baseline_monthly_cost = baseline_monthly_cost if baseline_monthly_cost > Decimal("0.00") else Decimal("100.00")
+        if baseline_monthly_cost is not None and baseline_monthly_cost > Decimal("0.00"):
+            self.baseline_monthly_cost = baseline_monthly_cost
+        else:
+            self.baseline_monthly_cost = Decimal("100.00")
 
     def evaluate_candidate(self, candidate: Candidate) -> ObjectiveScores:
         """Calculate normalized objective scores for a single candidate."""
@@ -52,11 +55,11 @@ class ObjectiveCalculator:
         # 5. Uncertainty Penalty
         uncertainty_penalty = self._calculate_uncertainty_penalty(candidate)
 
-        # Apply uncertainty penalty proportionally (does not drop below 0.0)
-        adjusted_cost = max(0.0, cost_score - (uncertainty_penalty * 0.2))
-        adjusted_sec = max(0.0, security_score - (uncertainty_penalty * 0.3))
-        adjusted_rel = max(0.0, reliability_score - (uncertainty_penalty * 0.3))
-        adjusted_simp = max(0.0, simplicity_score - (uncertainty_penalty * 0.2))
+        # Apply uncertainty penalty proportionally, strictly clamping to [0.0, 100.0]
+        adjusted_cost = max(0.0, min(100.0, cost_score - (uncertainty_penalty * 0.2)))
+        adjusted_sec = max(0.0, min(100.0, security_score - (uncertainty_penalty * 0.3)))
+        adjusted_rel = max(0.0, min(100.0, reliability_score - (uncertainty_penalty * 0.3)))
+        adjusted_simp = max(0.0, min(100.0, simplicity_score - (uncertainty_penalty * 0.2)))
 
         raw_metrics = {
             "estimated_savings_usd": candidate.estimated_monthly_savings,
@@ -81,7 +84,7 @@ class ObjectiveCalculator:
             uncertainty_penalty=round(uncertainty_penalty, 2),
             cost_savings_amount=savings_dec,
             raw_metrics=raw_metrics,
-            model_version="1.0",
+            model_version="1.1",
         )
 
     def calculate_scores(self, candidate: Candidate) -> ObjectiveScores:
@@ -96,8 +99,9 @@ class ObjectiveCalculator:
         """
         Compute scalar utility score under a given preference profile.
         Used strictly for ranking among the non-dominated Pareto set.
+        Safely falls back to BALANCED profile if an unknown or invalid profile is supplied.
         """
-        weights = PREFERENCE_WEIGHTS[preference]
+        weights = PREFERENCE_WEIGHTS.get(preference, PREFERENCE_WEIGHTS[PreferenceProfile.BALANCED])
         w_cost = weights[ObjectiveDimension.COST]
         w_sec = weights[ObjectiveDimension.SECURITY]
         w_rel = weights[ObjectiveDimension.RELIABILITY]
@@ -109,7 +113,7 @@ class ObjectiveCalculator:
             + (scores.reliability_score * w_rel)
             + (scores.simplicity_score * w_simp)
         )
-        return round(total, 2)
+        return round(max(0.0, min(100.0, total)), 2)
 
     def calculate_weighted_score(
         self,
@@ -131,14 +135,18 @@ class ObjectiveCalculator:
         Baseline = 50.0 (neutral / zero savings).
         Savings S > 0 increases score toward 100.0.
         Cost increase S < 0 reduces score toward 0.0.
+        Guards against zero or negative baseline cost.
+        Strictly clamped in [0.0, 100.0].
         """
         try:
             savings = Decimal(candidate.estimated_monthly_savings)
         except Exception:
             savings = Decimal("0.00")
 
+        effective_baseline = self.baseline_monthly_cost if self.baseline_monthly_cost > Decimal("0.00") else Decimal("100.00")
+
         # Proportion of baseline saved: (savings / baseline) * 50.0
-        ratio = float(savings / self.baseline_monthly_cost)
+        ratio = float(savings / effective_baseline)
         score = 50.0 + (ratio * 50.0)
         return max(0.0, min(100.0, score))
 

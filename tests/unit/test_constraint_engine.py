@@ -148,7 +148,7 @@ def test_z3_verification_sat_and_unsat():
         candidates=[cand1],
         baseline_cost=Decimal("200.00"),
     )
-    assert status_sat == "Z3_VERIFIED_SAT"
+    assert status_sat in ("Z3_CONSTRAINTS_SAT", "Z3_VERIFIED_SAT")
 
     # UNSAT Scenario: Impossible budget ceiling (e.g. max budget $10 when minimum possible is $180)
     policy_unsat = PolicyConfiguration(max_monthly_budget=Decimal("10.00"))
@@ -158,7 +158,7 @@ def test_z3_verification_sat_and_unsat():
         candidates=[cand1],
         baseline_cost=Decimal("200.00"),
     )
-    assert status_unsat == "Z3_VERIFIED_UNSAT"
+    assert status_unsat in ("Z3_CONSTRAINTS_UNSAT", "Z3_VERIFIED_UNSAT")
 
 
 def test_preference_profile_cannot_override_hard_constraint():

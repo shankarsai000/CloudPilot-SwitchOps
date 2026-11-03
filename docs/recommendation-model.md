@@ -1,14 +1,15 @@
-# CloudPilot SwitchOps — Recommendation Model & Traceability Lineage
+# CloudPilot SwitchOps — Recommendation Model & Evidence Provenance
 
 ## 1. Recommendation Synthesis
 
 The Recommendation Engine (`RecommendationEngine`) bridges quantitative optimization algorithms and human-readable engineering rationale. It compiles:
 
-1. **Executive Recommendation**: The top-ranked candidate from the Pareto frontier $\mathcal{P}$ under the active preference profile.
-2. **Impact Delta**: Direct comparison of monthly OpEx before and after adoption, with exact Decimal currency precision.
+1. **Executive Recommendation**: The top-ranked non-dominated candidate or composite plan from the Pareto frontier $\mathcal{P}$ under the active preference profile.
+2. **Impact Delta**: Direct comparison of monthly OpEx before and after adoption, with exact `Decimal` currency precision.
 3. **Trade-Off Analysis**: Transparent documentation explaining what is gained (e.g., $110/mo savings) versus what is compromised (e.g., lower peak compute burst headroom).
 4. **Alternatives Menu**: Non-dominated alternatives on the Pareto frontier for engineering evaluation.
 5. **Rejection Audit**: Explicit list of excluded candidates along with their failed constraint rule identifiers.
+6. **Evidence Provenance & SHA-256 Digest**: Immutable hash verifying the exact inputs, findings, and policies producing the decision.
 
 ---
 
@@ -21,21 +22,23 @@ In the Switch team room, CloudPilot posts structured markdown:
 - **Decision ID**: `dec-8e2b19cf` | **Status**: `COMPLETED`
 - **Target Workspace**: `samples/staging`
 - **Preference Profile**: `BALANCED`
-- **Z3 Formal Constraint Verification**: `Z3_VERIFIED_SAT`
-- **Candidate Pool**: 7 generated | **5 feasible** | **2 rejected** by hard constraints
+- **Optimization Scope**: `BOUNDED_COMBINATION (k=3)`
+- **Z3 Formal Constraint Verification**: `Z3_CONSTRAINTS_SAT`
+- **Provenance SHA-256**: `a4f89d1b63e2c940`
+- **Candidate Pool**: 74 generated | **65 feasible** | **9 rejected** by hard constraints
 
 ### 1. Executive Recommendation
-**Downsize Web Server Compute** (`cand-fin-003-ec2`)
-- **Monthly Impact**: Before: `$147.20` → After: `$36.80` (**Savings: $110.40/mo**)
-- **Security**: `NEUTRAL` | **Reliability**: `NEUTRAL` | **Complexity**: `LOW`
-- **Key Action**: Downsize instance_type from t3.xlarge to t3.medium in samples/staging/main.tf
+**Composite Plan (2 changes): Enable KMS encryption + Rightsize EC2** (`comb-b534274e`)
+- **Monthly Impact**: Before: `$147.20` → After: `$92.30` (**Savings: $54.90/mo**)
+- **Security**: `HIGH_POSITIVE` | **Reliability**: `NEUTRAL` | **Complexity**: `LOW`
+- **Key Action**: Bounded combination of 2 compatible candidates.
 
-### 2. Pareto Frontier & Alternatives (4 Non-Dominated)
-- `Downsize Web Server Compute` ⭐ [RECOMMENDED]: **$110.40/mo** savings | Scores: Cost=76, Sec=50, Rel=50
-- `Enable Multi-AZ Database Failover`: **-$45.00/mo** spend | Scores: Cost=39, Sec=50, Rel=90
-- `Restrict Public Ingress`: **$0.00/mo** savings | Scores: Cost=50, Sec=85, Rel=50
+### 2. Pareto Frontier & Alternatives (15 Non-Dominated)
+- `Composite Plan (2 changes)` ⭐ [RECOMMENDED]: **$54.90/mo** savings | Scores: Cost=63, Sec=89, Rel=49
+- `Rightsize EC2 'staging_web'`: **$54.90/mo** savings | Scores: Cost=63, Sec=49, Rel=49
+- `Attach persistent named volume to 'postgres'`: **$0.00/mo** savings | Scores: Cost=49, Sec=49, Rel=89
 
-### 3. Rejected Alternatives (2 Excluded by Hard Constraints)
+### 3. Rejected Alternatives (9 Excluded by Hard Constraints)
 - ❌ `Drop Persistent Volume to Reduce Disk Cost`: **REJECTED** ([CONST-REL-01] Stateful persistence violated)
 - ❌ `Expose Database to Avoid NAT Gateway Spend`: **REJECTED** ([CONST-SEC-01] Public DB binding disallowed)
 
@@ -43,17 +46,43 @@ In the Switch team room, CloudPilot posts structured markdown:
 - Changes are proposed in read-only analysis mode.
 - In Phase 4, human approval in this Switch room will be required before applying any change plan.
 
-*Full decision audit trail recorded with provenance referencing Assessment `asm-c284e1b7`.*
+*Full decision audit trail recorded with evidence provenance referencing Assessment `asm-c284e1b7` (SHA-256: `a4f89d1b63e2c940`).*
 ```
 
 ---
 
-## 3. Evidence Lineage & Provenance
+## 3. Evidence Provenance & Cryptographic Verification
 
-Every decision report records a complete `evidence_lineage` dictionary:
-- `task_id`: Identifier of the originating Switch task.
+Phase 3.1 replaces informal "cryptographic lineage" descriptions with an exact, independently reproducible **Evidence Provenance Architecture**.
+
+### Provenance Inputs
+The provenance payload contains the complete set of immutable decision inputs:
+- `task_id`: Identifier of the originating Switch room task.
 - `assessment_id`: Identifier of the underlying Phase 2 assessment.
 - `workspace_root`: Target filesystem root scanned during discovery.
-- `pricing_catalog_version`: FinOps catalog schema version.
-- `policy_version`: Policy invariants and budget threshold version.
-- `z3_verification_status`: Cryptographic/formal satisfiability record from Z3.
+- `pricing_catalog_version`: FinOps catalog schema version (e.g. `"1.0"`).
+- `policy_version`: Policy invariants and budget threshold version (e.g. `"1.0"`).
+- `objective_model_version`: Multi-objective model scoring version (`"1.1"`).
+- `optimization_scope`: Explicit bounded combinatorial scope (`"BOUNDED_COMBINATION (k=3)"`).
+- `z3_verification_status`: Formal satisfiability verdict from the Z3 SMT solver.
+- `pareto_optimal_candidate_ids`: Deterministically sorted IDs of non-dominated candidates.
+- `source_finding_ids`: Deterministically sorted finding IDs originating the proposals.
+- `affected_resource_ids`: Deterministically sorted resource IDs impacted by proposals.
+- `source_files`: Deterministically sorted declarative files declaring mutations.
+
+### SHA-256 Digest Computation
+```python
+def compute_provenance_hash(provenance_data: Dict[str, Any]) -> str:
+    clean_data = {k: v for k, v in provenance_data.items() if k != "provenance_hash"}
+    canonical_bytes = json.dumps(clean_data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(canonical_bytes).hexdigest()
+```
+
+### Independent Verification Utility
+Any third-party verifier or CI gate can independently verify provenance using:
+```python
+from app.services.decision.recommendation_engine import verify_report_provenance
+
+is_intact = verify_report_provenance(report)
+# Returns True if genuine; returns False if any finding, policy, or score was tampered with
+```

@@ -13,30 +13,40 @@ The Constraint Engine (`ConstraintEngine`) serves as the authoritative, non-nego
 | Constraint ID | Category | Enforcement Mode | Policy Rule | Violation Outcome |
 | :--- | :--- | :--- | :--- | :--- |
 | `CONST-OPS-01` | Operational | Deterministic Rule | Candidate must target supported, resolvable infrastructure resources. | Immediate rejection (`INFEASIBLE`) |
-| `CONST-SEC-01` | Security | Deterministic Rule | Database listeners (`5432`, `3306`, `6379`) must not be bound to `0.0.0.0/0`. | Immediate rejection (`INFEASIBLE`) |
-| `CONST-SEC-02` | Security | Deterministic Rule | Containers must not run with `privileged: true` capabilities. | Immediate rejection (`INFEASIBLE`) |
-| `CONST-SEC-03` | Security | Deterministic Rule | Containers must not mount host `/var/run/docker.sock`. | Immediate rejection (`INFEASIBLE`) |
-| `CONST-SEC-04` | Security | Deterministic Rule | Management ports (`22`, `3389`) must not retain wildcard `0.0.0.0/0` ingress. | Immediate rejection (`INFEASIBLE`) |
-| `CONST-SEC-05` | Security | Deterministic Rule | Storage encryption at rest must not be disabled. | Immediate rejection (`INFEASIBLE`) |
-| `CONST-REL-01` | Reliability | Deterministic Rule | Stateful database workloads must not have persistent storage removed. | Immediate rejection (`INFEASIBLE`) |
+| `CONST-SEC-01` | Security | Deterministic + Z3 | Database listeners (`5432`, `3306`, `6379`) must not be bound to `0.0.0.0/0`. | Immediate rejection (`INFEASIBLE`) |
+| `CONST-SEC-02` | Security | Deterministic + Z3 | Containers must not run with `privileged: true` capabilities. | Immediate rejection (`INFEASIBLE`) |
+| `CONST-SEC-03` | Security | Deterministic + Z3 | Containers must not mount host `/var/run/docker.sock`. | Immediate rejection (`INFEASIBLE`) |
+| `CONST-SEC-04` | Security | Deterministic + Z3 | Management ports (`22`, `3389`) must not retain wildcard `0.0.0.0/0` ingress. | Immediate rejection (`INFEASIBLE`) |
+| `CONST-SEC-05` | Security | Deterministic + Z3 | Storage encryption at rest must not be disabled. | Immediate rejection (`INFEASIBLE`) |
+| `CONST-REL-01` | Reliability | Deterministic + Z3 | Stateful database workloads must not have persistent storage removed. | Immediate rejection (`INFEASIBLE`) |
 | `CONST-FIN-01` | Financial | Deterministic + Z3 | Projected monthly spend must not exceed `monthly_budget_ceiling`. | Immediate rejection (`INFEASIBLE`) |
 
 ---
 
 ## 3. Formal Z3 SMT Theorem Prover Integration
 
-Beyond heuristic rules, CloudPilot uses Microsoft's **Z3 SMT Solver** (`z3-solver 5.3.3.0`) for formal mathematical verification.
+Beyond heuristic rules, CloudPilot uses Microsoft's **Z3 SMT Solver** (`z3-solver 5.3.3.0`) for formal mathematical satisfiability verification.
 
-### Encoding Logic
-1. **Selection Variables**: Boolean indicator variable $x_i \in \{0, 1\}$ for each candidate $c_i$.
-2. **Anti-pattern Invariants**: For any candidate marked as `DROP_PERSISTENCE` or `DISABLE_AUTH`:
+### Mathematical Formulation
+1. **Selection Indicators**: Boolean variable $x_i \in \{0, 1\}$ for each candidate $c_i \in C$, where $x_i = \text{True}$ denotes candidate inclusion in the final change plan.
+2. **Mandatory Invariants Encoding**: For any candidate $c_i$ violating an active mandatory policy invariant (`CONST-OPS-01`, `CONST-SEC-01..05`, `CONST-REL-01`):
    $$\neg x_i$$
-3. **Selection Requirement**: At least one candidate must be chosen:
-   $$\bigvee_{i=1}^n x_i$$
-4. **Real-Arithmetic Budget Inequalities**: If monthly budget ceiling $B$ is defined:
+3. **Mutual Exclusions & Interactions**:
+   - For all pairwise conflicts $(c_a, c_b)$ modifying the same resource attribute contradictorily:
+     $$\neg (x_a \land x_b)$$
+   - For all redundant duplicate candidate pairs $(c_a, c_b)$:
+     $$\neg (x_a \land x_b)$$
+4. **Dependency Implications**: For any candidate $c_{\text{dep}}$ requiring prerequisite parent $c_{\text{parent}}$:
+   $$x_{\text{dep}} \implies x_{\text{parent}}$$
+5. **Real-Arithmetic Budget Inequalities**: If monthly budget ceiling $B$ is configured:
    $$\forall i: x_i \implies \text{cost\_after}_i \le B$$
+6. **Candidate Selection Semantics**: When non-empty candidate proposals are presented:
+   $$\bigvee_{i=1}^n x_i$$
 
-### Status Reporting
-- `Z3_VERIFIED_SAT`: Proven mathematically satisfiable by Z3. A feasible solution exists that satisfies all invariants.
-- `Z3_VERIFIED_UNSAT`: Proven unsatisfiable by Z3. The budget ceiling or invariants are mutually contradictory.
-- `Z3_FALLBACK`: Graceful degradation if the native Z3 binary is unavailable in a sandboxed host environment.
+### Standardized Solver Status Codes
+- `Z3_CONSTRAINTS_SAT`: The encoded mandatory security invariants, persistence requirements, budget inequalities, and mutual exclusion rules are formally satisfiable.
+  > **Formal Semantics Note**: `SAT` proves satisfiability of the *encoded mathematical constraints*; it is not a proof of global runtime safety or system optimality.
+- `Z3_CONSTRAINTS_UNSAT`: The encoded constraints are mutually contradictory; no candidate satisfies all invariants, budget ceilings, and interaction exclusions simultaneously.
+- `Z3_UNKNOWN`: Solver timed out or could not prove satisfiability within configured timeout boundaries.
+- `Z3_UNAVAILABLE`: The native `z3-solver` package is not available in the execution environment; truth-preserving fallback is reported without faking SAT.
+- `RULE_ENGINE_VALIDATED`: Verification was performed via deterministic rule evaluation when solver was intentionally bypassed or candidate pool was empty.

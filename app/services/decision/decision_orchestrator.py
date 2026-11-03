@@ -26,6 +26,7 @@ from app.domain.policies import PolicyConfiguration
 from app.persistence.repository import TaskRepositoryInterface
 from app.services.decision.candidate_evaluator import CandidateEvaluator
 from app.services.decision.candidate_generator import CandidateGenerator
+from app.services.decision.combination_optimizer import CombinationOptimizer
 from app.services.decision.constraint_engine import ConstraintEngine
 from app.services.decision.objective_calculator import ObjectiveCalculator
 from app.services.decision.pareto_optimizer import ParetoOptimizer
@@ -47,6 +48,7 @@ class DecisionOrchestrator:
         objective_calculator: Optional[ObjectiveCalculator] = None,
         pareto_optimizer: Optional[ParetoOptimizer] = None,
         recommendation_engine: Optional[RecommendationEngine] = None,
+        combination_optimizer: Optional[CombinationOptimizer] = None,
     ) -> None:
         self.repository = repository
         self.generator = candidate_generator or CandidateGenerator()
@@ -60,6 +62,7 @@ class DecisionOrchestrator:
             objective_calculator=self.objective_calculator,
         )
         self.recommender = recommendation_engine or RecommendationEngine()
+        self.combination_optimizer = combination_optimizer or CombinationOptimizer(max_combination_size=3)
 
     def run_decision_analysis(
         self,
@@ -67,9 +70,11 @@ class DecisionOrchestrator:
         preference_profile: PreferenceProfile = PreferenceProfile.BALANCED,
         policy_config: Optional[PolicyConfiguration] = None,
         include_adversarial_test_candidates: bool = True,
+        enable_combination_optimization: bool = True,
     ) -> Tuple[DecisionRun, DecisionReport]:
         """
         Executes end-to-end decision intelligence on an existing task's assessment and inventory.
+        Evaluates both individual candidates and bounded candidate combinations (k <= 3).
         """
         policy = policy_config or PolicyConfiguration()
         # Update constraint engine with current policy
@@ -106,18 +111,29 @@ class DecisionOrchestrator:
             policy_config=policy,
             include_adversarial_test_candidates=include_adversarial_test_candidates,
         )
-        logger.info("Generated %d candidate changes for task '%s'", len(candidates), task_id)
+        logger.info("Generated %d base candidate changes for task '%s'", len(candidates), task_id)
 
         # 3. Detect Candidate Interactions / Conflicts
         interactions = self.evaluator.detect_interactions(candidates)
 
-        # 4. Evaluate Candidates (Hard Constraints & Objective Scores)
-        evaluations = self.evaluator.evaluate_all(candidates)
+        # 3b. Generate Bounded Multi-Candidate Combinations (k <= 3)
+        candidate_pool: List[Candidate] = list(candidates)
+        if enable_combination_optimization and len(candidates) >= 2:
+            composite_plans = self.combination_optimizer.generate_valid_combinations(
+                candidates=candidates,
+                interactions=interactions,
+            )
+            candidate_pool.extend(composite_plans)
+            logger.info("Generated %d bounded composite candidate plans", len(composite_plans))
+
+        # 4. Evaluate Candidates (Hard Constraints & Multi-Objective Scores)
+        evaluations = self.evaluator.evaluate_all(candidate_pool)
 
         # 5. Formal Z3 SMT Constraint Verification
         z3_status, z3_diag = self.constraint_engine.verify_satisfiability_with_z3(
-            candidates=candidates,
+            candidates=candidate_pool,
             baseline_cost=baseline_cost,
+            interactions=interactions,
         )
 
         # 6. Genuine Pareto Frontier Calculation & Preference Ranking

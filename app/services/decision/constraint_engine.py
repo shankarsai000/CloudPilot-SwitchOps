@@ -19,6 +19,7 @@ from app.domain.constraints import (
     ConstraintStatus,
     ConstraintType,
 )
+from app.domain.decisions import CandidateInteraction, InteractionType
 from app.domain.policies import PolicyConfiguration
 
 logger = logging.getLogger("cloudpilot.decision.constraints")
@@ -29,7 +30,7 @@ try:
     Z3_AVAILABLE = True
 except ImportError:
     Z3_AVAILABLE = False
-    logger.warning("Z3 solver library is not available. Constraint engine will record Z3_FALLBACK.")
+    logger.warning("Z3 solver library is not available. Constraint engine will record Z3_UNAVAILABLE.")
 
 
 class ConstraintEngine:
@@ -97,69 +98,144 @@ class ConstraintEngine:
         self,
         candidates: List[Candidate],
         baseline_cost: Decimal,
+        interactions: Optional[List[CandidateInteraction]] = None,
+        enforce_at_least_one: bool = True,
+        solver_timeout_ms: int = 5000,
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Formally verifies constraint satisfiability across the candidate set using the Z3 SMT solver.
-        Encodes integer/real budget inequalities and boolean invariants.
-        Returns (z3_status, diagnostics).
+        Encodes all active mandatory security invariants, persistence invariants,
+        budget inequalities, pairwise mutual exclusions, and dependency implications.
+
+        Standardized Solver Statuses:
+        - Z3_CONSTRAINTS_SAT: Encoded constraints are formally satisfiable (NOTE: this confirms
+          satisfiability of the encoded constraints only, NOT a proof of global safety or optimality).
+        - Z3_CONSTRAINTS_UNSAT: Encoded constraints are mutually contradictory or impossible to satisfy.
+        - Z3_UNKNOWN: Solver timed out or could not determine satisfiability.
+        - Z3_UNAVAILABLE: z3-solver library is not installed in the environment.
+        - RULE_ENGINE_VALIDATED: Evaluated by deterministic rules without formal solver execution.
         """
         if not Z3_AVAILABLE:
-            return "Z3_FALLBACK", {"reason": "z3-solver package not installed in environment"}
+            return "Z3_UNAVAILABLE", {
+                "reason": "z3-solver package is not installed or available in this runtime environment"
+            }
+
+        if not candidates:
+            return "RULE_ENGINE_VALIDATED", {
+                "reason": "Zero candidates presented for formal verification",
+                "solver_result": "empty",
+            }
 
         try:
             solver = z3.Solver()
+            solver.set("timeout", solver_timeout_ms)
             candidate_vars: Dict[str, z3.BoolRef] = {}
 
-            # Create boolean variables for each candidate: x_i == True means candidate is selected
+            # 1. Create boolean variables: x_i == True means candidate is selected in change plan
             for c in candidates:
                 var_name = f"select_{c.candidate_id.replace('-', '_')}"
                 candidate_vars[c.candidate_id] = z3.Bool(var_name)
 
-            # Rule 1: Invariant - Any candidate flagged as DROP_PERSISTENCE or DISABLE_AUTH must never be selected
+            # 2. Encode Mandatory Invariants (Security, Persistence, Operational Boundaries)
+            # For each candidate, evaluate against active policy rules. If any mandatory rule fails, assert Not(x_i).
+            rejected_by_invariant: Dict[str, List[str]] = {}
+            for c in candidates:
+                c_results = self.evaluate_candidate(c)
+                blocking = [r for r in c_results if r.is_blocking]
+                if blocking:
+                    solver.add(z3.Not(candidate_vars[c.candidate_id]))
+                    rejected_by_invariant[c.candidate_id] = [r.constraint_id for r in blocking]
+
+            # Invariant hardening: Drop persistence & disable auth must always be False
             for c in candidates:
                 if c.candidate_type in (CandidateType.DROP_PERSISTENCE, CandidateType.DISABLE_AUTH):
                     solver.add(z3.Not(candidate_vars[c.candidate_id]))
 
-            # Rule 2: Budget constraint formulation in Z3 Real arithmetic
+            # 3. Encode Financial Budget Ceiling Constraint in Z3 Real Arithmetic
             if self.policy.monthly_budget_ceiling is not None:
-                budget_ceiling = z3.RealVal(str(self.policy.monthly_budget_ceiling))
-                # Model total monthly spend: baseline - sum(savings_i * x_i) <= budget
-                # Equivalently: baseline - budget <= sum(savings_i * x_i)
-                total_spend = z3.RealVal(str(baseline_cost))
-                for c in candidates:
-                    try:
-                        c_after = z3.RealVal(str(c.estimated_monthly_cost_after))
-                    except Exception:
-                        c_after = z3.RealVal("0.0")
+                try:
+                    budget_ceiling = z3.RealVal(str(self.policy.monthly_budget_ceiling))
+                    for c in candidates:
+                        try:
+                            c_after = z3.RealVal(str(c.estimated_monthly_cost_after))
+                        except Exception:
+                            c_after = z3.RealVal("0.0")
+                        solver.add(z3.Implies(candidate_vars[c.candidate_id], c_after <= budget_ceiling))
+                except Exception as b_err:
+                    logger.warning("Error encoding budget ceiling in Z3: %s", b_err)
 
-                    # If candidate c is selected, its cost after must not exceed budget alone
-                    solver.add(z3.Implies(candidate_vars[c.candidate_id], c_after <= budget_ceiling))
+            # 4. Encode Interactions: Mutual Exclusions (Conflicts & Redundancies) and Dependencies
+            if interactions:
+                for inter in interactions:
+                    if inter.interaction_type in (InteractionType.CONFLICTING, InteractionType.REDUNDANT):
+                        for i in range(len(inter.candidate_ids)):
+                            for j in range(i + 1, len(inter.candidate_ids)):
+                                c_a = inter.candidate_ids[i]
+                                c_b = inter.candidate_ids[j]
+                                if c_a in candidate_vars and c_b in candidate_vars:
+                                    solver.add(z3.Not(z3.And(candidate_vars[c_a], candidate_vars[c_b])))
+                    elif inter.interaction_type == InteractionType.DEPENDENT:
+                        if len(inter.candidate_ids) >= 2:
+                            dep_id = inter.candidate_ids[0]
+                            parent_id = inter.candidate_ids[1]
+                            if dep_id in candidate_vars and parent_id in candidate_vars:
+                                solver.add(z3.Implies(candidate_vars[dep_id], candidate_vars[parent_id]))
 
-            if candidates:
-                # Rule 3: Require that at least one candidate proposal is selected
+            # 5. Candidate Selection Semantics: Require at least one candidate proposal to be selected
+            if enforce_at_least_one and candidates:
                 solver.add(z3.Or([candidate_vars[c.candidate_id] for c in candidates]))
 
-            # Check satisfiability
+            # 6. Execute Formal SMT Satisfiability Check
             check_result = solver.check()
             if check_result == z3.sat:
                 model = solver.model()
-                logger.info("Z3 SMT verification SATISFIED across %d candidates", len(candidates))
-                return "Z3_VERIFIED_SAT", {
+                selected_sample = [
+                    c.candidate_id
+                    for c in candidates
+                    if z3.is_true(model.eval(candidate_vars[c.candidate_id]))
+                ]
+                logger.info(
+                    "Z3 SMT verification SATISFIED across %d candidate(s) (assertions=%d)",
+                    len(candidates),
+                    len(solver.assertions()),
+                )
+                return "Z3_CONSTRAINTS_SAT", {
                     "solver_assertions": len(solver.assertions()),
                     "solver_result": "sat",
+                    "satisfiable_sample_selection": selected_sample,
+                    "rejected_by_invariant_count": len(rejected_by_invariant),
+                    "formal_guarantee": (
+                        "Formally verified: The encoded mandatory security invariants, "
+                        "persistence invariants, budget constraints, and candidate mutual exclusions "
+                        "are satisfiable. (Note: SAT indicates constraint satisfiability, not global proof of runtime safety)."
+                    ),
                 }
             elif check_result == z3.unsat:
-                logger.warning("Z3 SMT verification UNSATISFIED: Constraints mutually incompatible")
-                return "Z3_VERIFIED_UNSAT", {
+                logger.warning(
+                    "Z3 SMT verification UNSATISFIED: Constraints mutually incompatible (assertions=%d)",
+                    len(solver.assertions()),
+                )
+                return "Z3_CONSTRAINTS_UNSAT", {
                     "solver_assertions": len(solver.assertions()),
                     "solver_result": "unsat",
+                    "rejected_by_invariant_count": len(rejected_by_invariant),
+                    "reason": "Constraints are mutually unsatisfiable; no candidate satisfies all active invariants, budget ceilings, and mutual exclusion rules simultaneously.",
                 }
             else:
-                return "Z3_UNKNOWN", {"reason": "Z3 returned unknown"}
+                reason = str(solver.reason_unknown()) if hasattr(solver, "reason_unknown") else "unknown"
+                logger.warning("Z3 solver returned unknown outcome: %s", reason)
+                return "Z3_UNKNOWN", {
+                    "solver_assertions": len(solver.assertions()),
+                    "solver_result": "unknown",
+                    "reason": reason,
+                }
 
         except Exception as exc:
-            logger.error("Z3 verification encountered error: %s", exc)
-            return "Z3_FALLBACK", {"error": str(exc)}
+            logger.error("Z3 verification encountered unhandled error: %s", exc)
+            return "Z3_UNKNOWN", {
+                "solver_result": "error",
+                "error": str(exc),
+            }
 
     # --- Individual Constraint Checks ---
 
