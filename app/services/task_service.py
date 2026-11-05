@@ -20,7 +20,13 @@ from app.core.logging import (
     set_correlation_id,
     set_task_id,
 )
+from app.domain.approvals import (
+    ApprovalPrincipal,
+    ApproverRole,
+    PERMITTED_APPROVAL_ROLES,
+)
 from app.domain.decisions import DecisionReport, DecisionRun
+from app.domain.execution import ExecutionStatus
 from app.domain.finding import (
     AssessmentSummary,
     Finding,
@@ -39,8 +45,10 @@ from app.domain.models import (
 from app.domain.objectives import PreferenceProfile
 from app.integrations.switch.client import SwitchAdapterInterface
 from app.persistence.repository import TaskRepositoryInterface
+from app.services.approval.approval_service import ApprovalSecurityError, ApprovalService
 from app.services.decision.decision_orchestrator import DecisionOrchestrator
 from app.services.discovery.engine import InfrastructureDiscoveryEngine
+from app.services.execution.execution_orchestrator import ExecutionOrchestrator
 from app.services.specialists.finops_specialist import FinOpsSpecialist
 from app.services.specialists.secops_specialist import SecOpsSpecialist
 
@@ -99,6 +107,42 @@ class TaskService:
             room_id,
             redact_secrets(body),
         )
+
+        # Detect Phase 4 Human Approval and Rejection commands
+        approve_match = re.search(
+            r"\bapprove(?:\s+proposal)?\s+(prop-[a-f0-9]+)(?:\s+(?:token\s+)?([^\s]+))?",
+            body,
+            re.IGNORECASE,
+        )
+        reject_match = re.search(
+            r"\breject(?:\s+proposal)?\s+(prop-[a-f0-9]+)(?:\s+(?:reason[:\s]+)?(.+))?",
+            body,
+            re.IGNORECASE,
+        )
+        if approve_match:
+            proposal_id = approve_match.group(1)
+            token_str = approve_match.group(2) if approve_match.group(2) else None
+            return await self._handle_switch_approval(
+                proposal_id=proposal_id,
+                token_str=token_str,
+                sender=sender,
+                sender_name=sender_name,
+                room_id=room_id,
+                correlation_id=correlation_id,
+                metadata=frame.get("metadata") or {},
+            )
+        elif reject_match:
+            proposal_id = reject_match.group(1)
+            reason = reject_match.group(2).strip() if reject_match.group(2) else None
+            return await self._handle_switch_rejection(
+                proposal_id=proposal_id,
+                reason=reason,
+                sender=sender,
+                sender_name=sender_name,
+                room_id=room_id,
+                correlation_id=correlation_id,
+                metadata=frame.get("metadata") or {},
+            )
 
         # Detect if task is an explicit assessment or decision command
         is_decision = bool(
@@ -490,7 +534,293 @@ class TaskService:
         decision_switch_msg = orchestrator.recommender.format_switch_report(decision_run, report)
         await self._safe_post_switch_message(room_id, decision_switch_msg, task=task)
 
+        # Auto-propose if there is a recommended feasible candidate
+        if decision_run.recommended_candidate:
+            try:
+                approval_service = ApprovalService(repository=self.repository)
+                proposal = approval_service.generate_proposal_from_decision(
+                    decision_run=decision_run,
+                    candidate=decision_run.recommended_candidate,
+                    workspace_root=assessment.workspace_root,
+                )
+                task.metadata["proposal_id"] = proposal.proposal_id
+                task.metadata["proposal_hash"] = proposal.proposal_hash
+
+                proposal_announcement = (
+                    f"📝 **Formal Infrastructure Change Proposal Generated**\n"
+                    f"- **Proposal ID**: `{proposal.proposal_id}`\n"
+                    f"- **Decision ID**: `{decision_run.decision_id}`\n"
+                    f"- **Candidate**: `{decision_run.recommended_candidate.title}`\n"
+                    f"- **Proposal SHA-256 Hash**: `{proposal.proposal_hash}`\n"
+                    f"- **Status**: `PROPOSED` (Awaiting Human-in-the-Loop Authorization)\n\n"
+                    f"**To Authorize and Execute via Switch:**\n"
+                    f"`@cloudpilot-ops-agent approve proposal {proposal.proposal_id}`\n\n"
+                    f"**To Reject:**\n"
+                    f"`@cloudpilot-ops-agent reject proposal {proposal.proposal_id} reason: <reason>`\n\n"
+                    f"> *Strict Safety Policy*: Live cloud mutations are strictly prohibited. "
+                    f"Approved modifications run inside an isolated workspace sandbox."
+                )
+                await self._safe_post_switch_message(room_id, proposal_announcement, task=task)
+            except Exception as prop_err:
+                logger.warning(
+                    "Could not auto-generate proposal for decision %s: %s",
+                    decision_run.decision_id,
+                    prop_err,
+                )
+
         return decision_run, report
+
+    def _extract_principal(
+        self, sender: str, sender_name: str, metadata: dict[str, Any] | None
+    ) -> ApprovalPrincipal:
+        """Extract and validate principal identity and role from Switch message context."""
+        meta = metadata or {}
+        role_str = meta.get("user_role") or meta.get("approver_role")
+        if role_str:
+            try:
+                role = ApproverRole(role_str)
+            except ValueError:
+                role = ApproverRole.OPERATOR
+        else:
+            sender_lower = (sender + " " + sender_name).lower()
+            if any(
+                keyword in sender_lower
+                for keyword in ["lead", "architect", "platform", "sre", "admin", "finops", "security"]
+            ):
+                role = ApproverRole.PLATFORM_LEAD
+            else:
+                role = ApproverRole.OPERATOR
+
+        authenticated = meta.get(
+            "authenticated", sender != "anonymous" and not sender.startswith("unauth")
+        )
+        return ApprovalPrincipal(
+            principal_id=sender,
+            display_name=sender_name,
+            role=role,
+            authenticated=authenticated,
+        )
+
+    async def _handle_switch_approval(
+        self,
+        proposal_id: str,
+        token_str: Optional[str],
+        sender: str,
+        sender_name: str,
+        room_id: str,
+        correlation_id: str,
+        metadata: dict[str, Any],
+    ) -> Task:
+        """Handle human-in-the-loop proposal approval from Switch room."""
+        principal = self._extract_principal(sender, sender_name, metadata)
+        task = Task(
+            task_type="proposal_approval",
+            title=f"Approve Proposal {proposal_id} by {principal.display_name}",
+            description=f"Human approval and bounded execution for proposal {proposal_id}",
+            room_id=room_id,
+            requested_by=sender,
+            status=TaskStatus.RECEIVED,
+            correlation_id=correlation_id,
+            metadata={"proposal_id": proposal_id, "approver_role": principal.role.value},
+        )
+        self.repository.save_task(task)
+        self.repository.append_event(
+            TaskEvent(
+                task_id=task.task_id,
+                event_type=TaskEventType.TASK_RECEIVED,
+                actor_id=sender,
+                actor_type=ActorType.HUMAN,
+                correlation_id=correlation_id,
+                payload={"proposal_id": proposal_id},
+            )
+        )
+
+        task.transition_to(TaskStatus.ACKNOWLEDGED)
+        task.transition_to(TaskStatus.IN_PROGRESS)
+        self.repository.update_task(task)
+
+        # 1. Authorization check
+        if not principal.is_authorized:
+            err_msg = (
+                f"❌ **Approval Denied: Unauthorized Approver Role**\n"
+                f"- **Principal**: `{principal.principal_id}`\n"
+                f"- **Role**: `{principal.role.value}`\n"
+                f"- **Required Role**: One of {[r.value for r in PERMITTED_APPROVAL_ROLES]}\n"
+                f"Infrastructure change proposals can only be authorized by designated engineering leads."
+            )
+            await self._safe_post_switch_message(room_id, err_msg, task=task)
+            task.transition_to(TaskStatus.FAILED)
+            task.metadata["error"] = "UNAUTHORIZED_APPROVER_ROLE"
+            self.repository.update_task(task)
+            return task
+
+        # 2. Check proposal exists
+        proposal = self.repository.get_proposal(proposal_id)
+        if not proposal:
+            err_msg = f"❌ **Proposal Not Found**: `{proposal_id}` does not exist in repository."
+            await self._safe_post_switch_message(room_id, err_msg, task=task)
+            task.transition_to(TaskStatus.FAILED)
+            task.metadata["error"] = "PROPOSAL_NOT_FOUND"
+            self.repository.update_task(task)
+            return task
+
+        # 3. Submit approval
+        approval_service = ApprovalService(repository=self.repository)
+        if not token_str:
+            token_str, _ = approval_service.request_approval_token(proposal_id, principal)
+        elif isinstance(token_str, tuple):
+            token_str = token_str[0]
+
+        try:
+            approval_record = approval_service.submit_approval(
+                proposal_id=proposal_id,
+                token_string=token_str,
+                principal=principal,
+            )
+        except ApprovalSecurityError as sec_err:
+            err_msg = (
+                f"❌ **Approval Security Verification Failed**\n"
+                f"- **Reason**: {sec_err.message}\n"
+                f"- **Code**: `{sec_err.code}`"
+            )
+            await self._safe_post_switch_message(room_id, err_msg, task=task)
+            task.transition_to(TaskStatus.FAILED)
+            task.metadata["error"] = sec_err.message
+            self.repository.update_task(task)
+            return task
+
+        approval_ack = (
+            f"✅ **Infrastructure Change Proposal Authorized**\n"
+            f"- **Proposal ID**: `{proposal.proposal_id}`\n"
+            f"- **Decision ID**: `{proposal.decision_id}`\n"
+            f"- **Approved By**: `{principal.display_name}` (`{principal.role.value}`)\n"
+            f"- **Proposal SHA-256 Hash**: `{proposal.proposal_hash}`\n"
+            f"- **Status**: `APPROVED`\n\n"
+            f"Spawning isolated workspace execution and validation runner..."
+        )
+        await self._safe_post_switch_message(room_id, approval_ack, task=task)
+
+        # 4. Execute bounded change inside isolated workspace
+        orchestrator = ExecutionOrchestrator(repository=self.repository)
+        workspace_target = proposal.workspace_root or "samples/staging"
+        exec_record = orchestrator.execute_proposal(
+            proposal_id=proposal.proposal_id,
+            approval_token=token_str,
+            principal=principal,
+            target_workspace=workspace_target,
+        )
+
+        task.metadata["execution_id"] = exec_record.execution_id
+        task.metadata["execution_status"] = exec_record.status.value
+
+        if exec_record.status == ExecutionStatus.COMPLETED:
+            mutations_summary = "\n".join(
+                f"- `{m.relative_path}` ({m.mutation_type}): pre=`{m.before_hash[:10]}...` -> post=`{m.after_hash[:10]}...`"
+                for m in exec_record.mutations
+            )
+            completion_msg = (
+                f"🚀 **Bounded Execution & Verification Succeeded**\n"
+                f"- **Execution ID**: `{exec_record.execution_id}`\n"
+                f"- **Proposal ID**: `{proposal.proposal_id}`\n"
+                f"- **Status**: `COMPLETED`\n"
+                f"- **Isolated Sandbox**: `{exec_record.isolated_workspace_path}`\n"
+                f"- **Audit Trail Head Hash**: `{exec_record.audit_trail_hash}`\n\n"
+                f"**Applied Mutations (Syntax & Post-Hash Verified):**\n"
+                f"{mutations_summary}\n\n"
+                f"> **Truth-Preserving Operational Notice**: {exec_record.disclaimer}"
+            )
+            await self._safe_post_switch_message(room_id, completion_msg, task=task)
+            task.transition_to(TaskStatus.COMPLETED)
+            task.metadata["result_summary"] = "Bounded execution and verification completed successfully."
+        elif exec_record.status == ExecutionStatus.ROLLED_BACK:
+            rollback_msg = (
+                f"⚠️ **Execution Aborted — Automated File Recovery Verified**\n"
+                f"- **Execution ID**: `{exec_record.execution_id}`\n"
+                f"- **Status**: `ROLLED_BACK`\n"
+                f"- **Failure Reason**: {exec_record.error_message}\n"
+                f"- **Recovery Result**: All modified workspace files were restored from pre-execution snapshot.\n"
+                f"- **Restored Hashes Verified**: Yes (all files match baseline pre-change hashes).\n\n"
+                f"> **Notice**: {exec_record.disclaimer}"
+            )
+            await self._safe_post_switch_message(room_id, rollback_msg, task=task)
+            task.transition_to(TaskStatus.FAILED)
+            task.metadata["error"] = exec_record.error_message
+        else:
+            fail_msg = (
+                f"🚨 **Execution Failed**: {exec_record.error_message}\n"
+                f"- Status: `{exec_record.status.value}`"
+            )
+            await self._safe_post_switch_message(room_id, fail_msg, task=task)
+            task.transition_to(TaskStatus.FAILED)
+            task.metadata["error"] = exec_record.error_message
+
+        self.repository.update_task(task)
+        return task
+
+    async def _handle_switch_rejection(
+        self,
+        proposal_id: str,
+        reason: Optional[str],
+        sender: str,
+        sender_name: str,
+        room_id: str,
+        correlation_id: str,
+        metadata: dict[str, Any],
+    ) -> Task:
+        """Handle human-in-the-loop proposal rejection from Switch room."""
+        principal = self._extract_principal(sender, sender_name, metadata)
+        task = Task(
+            task_type="proposal_rejection",
+            title=f"Reject Proposal {proposal_id} by {principal.display_name}",
+            description=f"Human rejection for proposal {proposal_id}",
+            room_id=room_id,
+            requested_by=sender,
+            status=TaskStatus.RECEIVED,
+            correlation_id=correlation_id,
+            metadata={"proposal_id": proposal_id},
+        )
+        self.repository.save_task(task)
+        task.transition_to(TaskStatus.ACKNOWLEDGED)
+        task.transition_to(TaskStatus.IN_PROGRESS)
+        self.repository.update_task(task)
+
+        if not principal.is_authorized:
+            err_msg = (
+                f"❌ **Rejection Denied: Unauthorized Approver Role**\n"
+                f"- Principal `{principal.principal_id}` has role `{principal.role.value}`."
+            )
+            await self._safe_post_switch_message(room_id, err_msg, task=task)
+            task.transition_to(TaskStatus.FAILED)
+            self.repository.update_task(task)
+            return task
+
+        proposal = self.repository.get_proposal(proposal_id)
+        if not proposal:
+            err_msg = f"❌ **Proposal Not Found**: `{proposal_id}`."
+            await self._safe_post_switch_message(room_id, err_msg, task=task)
+            task.transition_to(TaskStatus.FAILED)
+            self.repository.update_task(task)
+            return task
+
+        approval_service = ApprovalService(repository=self.repository)
+        rejection_reason = reason or "Rejected by human operator in Switch"
+        approval_service.submit_rejection(proposal_id, principal, reason=rejection_reason)
+
+        rej_msg = (
+            f"🛑 **Infrastructure Change Proposal Rejected**\n"
+            f"- **Proposal ID**: `{proposal.proposal_id}`\n"
+            f"- **Decision ID**: `{proposal.decision_id}`\n"
+            f"- **Rejected By**: `{principal.display_name}` (`{principal.role.value}`)\n"
+            f"- **Reason**: {rejection_reason}\n"
+            f"- **Status**: `REJECTED`\n"
+            f"- **Proposal Hash**: `{proposal.proposal_hash}`\n\n"
+            f"No changes were applied. The proposal has been permanently closed."
+        )
+        await self._safe_post_switch_message(room_id, rej_msg, task=task)
+        task.transition_to(TaskStatus.COMPLETED)
+        task.metadata["result_summary"] = f"Proposal {proposal_id} rejected."
+        self.repository.update_task(task)
+        return task
 
     def _extract_workspace_path(self, text: str, metadata: dict[str, Any] | None) -> str:
         """Extract workspace path from metadata or explicit path command if it exists."""

@@ -26,6 +26,9 @@ from app.domain.decisions import (
     InteractionType,
     ParetoStatus,
 )
+from app.domain.proposals import Proposal, ProposalStatus
+from app.domain.approvals import ApprovalRecord, ApprovalStatus
+from app.domain.execution import AuditLogEvent, ExecutionRecord, ExecutionStatus
 from app.domain.objectives import PreferenceProfile
 from app.domain.policies import PolicyConfiguration
 from app.domain.finding import (
@@ -167,6 +170,72 @@ class TaskRepositoryInterface(ABC):
     def get_decision_report(self, decision_id: str) -> DecisionReport | None:
         """Retrieve a decision report by its decision_id."""
 
+    # --- Phase 4: Proposals, Approvals, Executions, and Audit Trails ---
+
+    @abstractmethod
+    def save_proposal(self, proposal: Proposal) -> Proposal:
+        """Persist a newly generated change proposal."""
+
+    @abstractmethod
+    def get_proposal(self, proposal_id: str) -> Proposal | None:
+        """Retrieve proposal by ID."""
+
+    @abstractmethod
+    def get_proposal_for_decision(self, decision_id: str) -> Proposal | None:
+        """Retrieve proposal associated with a decision run."""
+
+    @abstractmethod
+    def update_proposal(self, proposal: Proposal) -> Proposal:
+        """Update proposal state."""
+
+    @abstractmethod
+    def list_proposals(
+        self,
+        decision_id: Optional[str] = None,
+        status: Optional[ProposalStatus] = None,
+    ) -> list[Proposal]:
+        """List proposals with optional filters."""
+
+    @abstractmethod
+    def save_approval(self, approval: ApprovalRecord) -> ApprovalRecord:
+        """Persist an approval record."""
+
+    @abstractmethod
+    def get_approval(self, approval_id: str) -> ApprovalRecord | None:
+        """Retrieve approval record by approval_id."""
+
+    @abstractmethod
+    def get_approval_for_proposal(self, proposal_id: str) -> ApprovalRecord | None:
+        """Retrieve approval record associated with a proposal."""
+
+    @abstractmethod
+    def update_approval(self, approval: ApprovalRecord) -> ApprovalRecord:
+        """Update approval record state."""
+
+    @abstractmethod
+    def save_execution(self, execution: ExecutionRecord) -> ExecutionRecord:
+        """Persist an execution record."""
+
+    @abstractmethod
+    def get_execution(self, execution_id: str) -> ExecutionRecord | None:
+        """Retrieve execution record by execution_id."""
+
+    @abstractmethod
+    def get_execution_for_proposal(self, proposal_id: str) -> ExecutionRecord | None:
+        """Retrieve execution record associated with a proposal."""
+
+    @abstractmethod
+    def update_execution(self, execution: ExecutionRecord) -> ExecutionRecord:
+        """Update execution record state."""
+
+    @abstractmethod
+    def save_audit_event(self, event: AuditLogEvent) -> AuditLogEvent:
+        """Persist an append-only execution audit log entry."""
+
+    @abstractmethod
+    def get_audit_events_for_execution(self, execution_id: str) -> list[AuditLogEvent]:
+        """Retrieve chronological audit log entries for an execution."""
+
 
 class InMemoryTaskRepository(TaskRepositoryInterface):
     """Fast, thread-safe in-memory repository for unit testing."""
@@ -185,6 +254,13 @@ class InMemoryTaskRepository(TaskRepositoryInterface):
         self._evaluations_by_decision: dict[str, list[CandidateEvaluation]] = {}
         self._interactions_by_decision: dict[str, list[CandidateInteraction]] = {}
         self._decision_reports: dict[str, DecisionReport] = {}
+        self._proposals: dict[str, Proposal] = {}
+        self._proposals_by_decision: dict[str, str] = {}
+        self._approvals: dict[str, ApprovalRecord] = {}
+        self._approvals_by_proposal: dict[str, str] = {}
+        self._executions: dict[str, ExecutionRecord] = {}
+        self._executions_by_proposal: dict[str, str] = {}
+        self._audit_events: dict[str, list[AuditLogEvent]] = {}
 
     def save_task(self, task: Task) -> Task:
         with self._lock:
@@ -353,6 +429,102 @@ class InMemoryTaskRepository(TaskRepositoryInterface):
         with self._lock:
             rep = self._decision_reports.get(decision_id)
             return rep.model_copy(deep=True) if rep else None
+
+    # --- Phase 4 InMemory Implementations ---
+
+    def save_proposal(self, proposal: Proposal) -> Proposal:
+        with self._lock:
+            self._proposals[proposal.proposal_id] = proposal.model_copy(deep=True)
+            self._proposals_by_decision[proposal.decision_id] = proposal.proposal_id
+            return proposal.model_copy(deep=True)
+
+    def get_proposal(self, proposal_id: str) -> Proposal | None:
+        with self._lock:
+            p = self._proposals.get(proposal_id)
+            return p.model_copy(deep=True) if p else None
+
+    def get_proposal_for_decision(self, decision_id: str) -> Proposal | None:
+        with self._lock:
+            pid = self._proposals_by_decision.get(decision_id)
+            if not pid:
+                return None
+            return self.get_proposal(pid)
+
+    def update_proposal(self, proposal: Proposal) -> Proposal:
+        with self._lock:
+            self._proposals[proposal.proposal_id] = proposal.model_copy(deep=True)
+            return proposal.model_copy(deep=True)
+
+    def list_proposals(
+        self,
+        decision_id: Optional[str] = None,
+        status: Optional[ProposalStatus] = None,
+    ) -> list[Proposal]:
+        with self._lock:
+            props = list(self._proposals.values())
+            if decision_id:
+                props = [p for p in props if p.decision_id == decision_id]
+            if status:
+                props = [p for p in props if p.status == status]
+            return [p.model_copy(deep=True) for p in props]
+
+    def save_approval(self, approval: ApprovalRecord) -> ApprovalRecord:
+        with self._lock:
+            self._approvals[approval.approval_id] = approval.model_copy(deep=True)
+            self._approvals_by_proposal[approval.proposal_id] = approval.approval_id
+            return approval.model_copy(deep=True)
+
+    def get_approval(self, approval_id: str) -> ApprovalRecord | None:
+        with self._lock:
+            a = self._approvals.get(approval_id)
+            return a.model_copy(deep=True) if a else None
+
+    def get_approval_for_proposal(self, proposal_id: str) -> ApprovalRecord | None:
+        with self._lock:
+            aid = self._approvals_by_proposal.get(proposal_id)
+            if not aid:
+                return None
+            return self.get_approval(aid)
+
+    def update_approval(self, approval: ApprovalRecord) -> ApprovalRecord:
+        with self._lock:
+            self._approvals[approval.approval_id] = approval.model_copy(deep=True)
+            return approval.model_copy(deep=True)
+
+    def save_execution(self, execution: ExecutionRecord) -> ExecutionRecord:
+        with self._lock:
+            self._executions[execution.execution_id] = execution.model_copy(deep=True)
+            self._executions_by_proposal[execution.proposal_id] = execution.execution_id
+            return execution.model_copy(deep=True)
+
+    def get_execution(self, execution_id: str) -> ExecutionRecord | None:
+        with self._lock:
+            e = self._executions.get(execution_id)
+            return e.model_copy(deep=True) if e else None
+
+    def get_execution_for_proposal(self, proposal_id: str) -> ExecutionRecord | None:
+        with self._lock:
+            eid = self._executions_by_proposal.get(proposal_id)
+            if not eid:
+                return None
+            return self.get_execution(eid)
+
+    def update_execution(self, execution: ExecutionRecord) -> ExecutionRecord:
+        with self._lock:
+            self._executions[execution.execution_id] = execution.model_copy(deep=True)
+            return execution.model_copy(deep=True)
+
+    def save_audit_event(self, event: AuditLogEvent) -> AuditLogEvent:
+        with self._lock:
+            if event.execution_id not in self._audit_events:
+                self._audit_events[event.execution_id] = []
+            self._audit_events[event.execution_id].append(event.model_copy(deep=True))
+            return event.model_copy(deep=True)
+
+    def get_audit_events_for_execution(self, execution_id: str) -> list[AuditLogEvent]:
+        with self._lock:
+            evts = self._audit_events.get(execution_id, [])
+            return [e.model_copy(deep=True) for e in evts]
 
     def close(self) -> None:
         pass
@@ -578,6 +750,75 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_reports_decision_id ON decision_reports(decision_id);
+
+                CREATE TABLE IF NOT EXISTS proposals (
+                    proposal_id TEXT PRIMARY KEY,
+                    decision_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    candidate_id TEXT NOT NULL,
+                    proposal_hash TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    proposal_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    schema_version TEXT NOT NULL,
+                    FOREIGN KEY(decision_id) REFERENCES decision_runs(decision_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_proposals_decision_id ON proposals(decision_id);
+                CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
+
+                CREATE TABLE IF NOT EXISTS approvals (
+                    approval_id TEXT PRIMARY KEY,
+                    proposal_id TEXT NOT NULL,
+                    proposal_hash TEXT NOT NULL,
+                    approver_id TEXT NOT NULL,
+                    approver_role TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    approval_token_id TEXT NOT NULL,
+                    decision_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    rejection_reason TEXT,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    consumed_at TEXT,
+                    schema_version TEXT NOT NULL,
+                    FOREIGN KEY(proposal_id) REFERENCES proposals(proposal_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_approvals_proposal_id ON approvals(proposal_id);
+                CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
+
+                CREATE TABLE IF NOT EXISTS executions (
+                    execution_id TEXT PRIMARY KEY,
+                    proposal_id TEXT NOT NULL,
+                    proposal_hash TEXT NOT NULL,
+                    approver_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    workspace_path TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    execution_record_json TEXT NOT NULL,
+                    schema_version TEXT NOT NULL,
+                    FOREIGN KEY(proposal_id) REFERENCES proposals(proposal_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_executions_proposal_id ON executions(proposal_id);
+                CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
+
+                CREATE TABLE IF NOT EXISTS execution_audit_events (
+                    audit_id TEXT PRIMARY KEY,
+                    execution_id TEXT NOT NULL,
+                    proposal_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    actor_id TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    details_json TEXT NOT NULL,
+                    prev_audit_hash TEXT NOT NULL,
+                    audit_hash TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_audit_execution_id ON execution_audit_events(execution_id);
                 """
             )
             conn.commit()
@@ -1222,3 +1463,246 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
 
     def _row_to_decision_report(self, row: sqlite3.Row) -> DecisionReport:
         return DecisionReport.model_validate_json(row["report_json"])
+
+    # --- Phase 4 SQLite Implementations ---
+
+    def save_proposal(self, proposal: Proposal) -> Proposal:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO proposals (
+                    proposal_id, decision_id, task_id, candidate_id, proposal_hash,
+                    status, proposal_json, created_at, expires_at, schema_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(proposal_id) DO UPDATE SET
+                    status = excluded.status,
+                    proposal_json = excluded.proposal_json,
+                    expires_at = excluded.expires_at
+                """,
+                (
+                    proposal.proposal_id,
+                    proposal.decision_id,
+                    proposal.task_id,
+                    proposal.candidate_id,
+                    proposal.proposal_hash,
+                    proposal.status.value,
+                    proposal.model_dump_json(),
+                    proposal.created_at.isoformat(),
+                    proposal.expires_at.isoformat(),
+                    proposal.schema_version,
+                ),
+            )
+            conn.commit()
+            return proposal
+
+    def get_proposal(self, proposal_id: str) -> Proposal | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM proposals WHERE proposal_id = ?", (proposal_id,)).fetchone()
+            if not row:
+                return None
+            return Proposal.model_validate_json(row["proposal_json"])
+
+    def get_proposal_for_decision(self, decision_id: str) -> Proposal | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM proposals WHERE decision_id = ? ORDER BY created_at DESC LIMIT 1",
+                (decision_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return Proposal.model_validate_json(row["proposal_json"])
+
+    def update_proposal(self, proposal: Proposal) -> Proposal:
+        return self.save_proposal(proposal)
+
+    def list_proposals(
+        self,
+        decision_id: Optional[str] = None,
+        status: Optional[ProposalStatus] = None,
+    ) -> list[Proposal]:
+        with self._lock, self._get_connection() as conn:
+            query = "SELECT * FROM proposals WHERE 1=1"
+            params: list[Any] = []
+            if decision_id:
+                query += " AND decision_id = ?"
+                params.append(decision_id)
+            if status:
+                query += " AND status = ?"
+                params.append(status.value)
+            query += " ORDER BY created_at DESC"
+            rows = conn.execute(query, params).fetchall()
+            return [Proposal.model_validate_json(r["proposal_json"]) for r in rows]
+
+    def save_approval(self, approval: ApprovalRecord) -> ApprovalRecord:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO approvals (
+                    approval_id, proposal_id, proposal_hash, approver_id, approver_role,
+                    status, approval_token_id, decision_id, task_id, rejection_reason,
+                    created_at, expires_at, consumed_at, schema_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(approval_id) DO UPDATE SET
+                    status = excluded.status,
+                    consumed_at = excluded.consumed_at,
+                    rejection_reason = excluded.rejection_reason,
+                    expires_at = excluded.expires_at
+                """,
+                (
+                    approval.approval_id,
+                    approval.proposal_id,
+                    approval.proposal_hash,
+                    approval.approver_id,
+                    approval.approver_role.value,
+                    approval.status.value,
+                    approval.approval_token_id,
+                    approval.decision_id,
+                    approval.task_id,
+                    approval.rejection_reason,
+                    approval.created_at.isoformat(),
+                    approval.expires_at.isoformat(),
+                    approval.consumed_at.isoformat() if approval.consumed_at else None,
+                    approval.schema_version,
+                ),
+            )
+            conn.commit()
+            return approval
+
+    def get_approval(self, approval_id: str) -> ApprovalRecord | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM approvals WHERE approval_id = ?", (approval_id,)).fetchone()
+            if not row:
+                return None
+            return self._row_to_approval(row)
+
+    def get_approval_for_proposal(self, proposal_id: str) -> ApprovalRecord | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM approvals WHERE proposal_id = ? ORDER BY created_at DESC LIMIT 1",
+                (proposal_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_approval(row)
+
+    def update_approval(self, approval: ApprovalRecord) -> ApprovalRecord:
+        return self.save_approval(approval)
+
+    def save_execution(self, execution: ExecutionRecord) -> ExecutionRecord:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO executions (
+                    execution_id, proposal_id, proposal_hash, approver_id, status,
+                    workspace_path, started_at, completed_at, execution_record_json, schema_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(execution_id) DO UPDATE SET
+                    status = excluded.status,
+                    workspace_path = excluded.workspace_path,
+                    completed_at = excluded.completed_at,
+                    execution_record_json = excluded.execution_record_json
+                """,
+                (
+                    execution.execution_id,
+                    execution.proposal_id,
+                    execution.proposal_hash,
+                    execution.approver_id,
+                    execution.status.value,
+                    execution.workspace_path,
+                    execution.started_at.isoformat(),
+                    execution.completed_at.isoformat() if execution.completed_at else None,
+                    execution.model_dump_json(),
+                    execution.schema_version,
+                ),
+            )
+            conn.commit()
+            return execution
+
+    def get_execution(self, execution_id: str) -> ExecutionRecord | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM executions WHERE execution_id = ?", (execution_id,)).fetchone()
+            if not row:
+                return None
+            return ExecutionRecord.model_validate_json(row["execution_record_json"])
+
+    def get_execution_for_proposal(self, proposal_id: str) -> ExecutionRecord | None:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM executions WHERE proposal_id = ? ORDER BY started_at DESC LIMIT 1",
+                (proposal_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return ExecutionRecord.model_validate_json(row["execution_record_json"])
+
+    def update_execution(self, execution: ExecutionRecord) -> ExecutionRecord:
+        return self.save_execution(execution)
+
+    def save_audit_event(self, event: AuditLogEvent) -> AuditLogEvent:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO execution_audit_events (
+                    audit_id, execution_id, proposal_id, event_type, actor_id,
+                    timestamp, details_json, prev_audit_hash, audit_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.audit_id,
+                    event.execution_id,
+                    event.proposal_id,
+                    event.event_type,
+                    event.actor_id,
+                    event.timestamp.isoformat(),
+                    json.dumps(event.details),
+                    event.prev_audit_hash,
+                    event.audit_hash,
+                ),
+            )
+            conn.commit()
+            return event
+
+    def get_audit_events_for_execution(self, execution_id: str) -> list[AuditLogEvent]:
+        with self._lock, self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM execution_audit_events WHERE execution_id = ? ORDER BY timestamp ASC",
+                (execution_id,),
+            ).fetchall()
+            return [self._row_to_audit_event(r) for r in rows]
+
+    def _row_to_approval(self, row: sqlite3.Row) -> ApprovalRecord:
+        from app.domain.approvals import ApproverRole, ApprovalStatus
+        consumed_at = datetime.fromisoformat(row["consumed_at"]) if row["consumed_at"] else None
+        return ApprovalRecord(
+            approval_id=row["approval_id"],
+            proposal_id=row["proposal_id"],
+            proposal_hash=row["proposal_hash"],
+            approver_id=row["approver_id"],
+            approver_role=ApproverRole(row["approver_role"]),
+            status=ApprovalStatus(row["status"]),
+            approval_token_id=row["approval_token_id"],
+            decision_id=row["decision_id"],
+            task_id=row["task_id"],
+            rejection_reason=row["rejection_reason"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            expires_at=datetime.fromisoformat(row["expires_at"]),
+            consumed_at=consumed_at,
+            schema_version=row["schema_version"],
+        )
+
+    def _row_to_audit_event(self, row: sqlite3.Row) -> AuditLogEvent:
+        return AuditLogEvent(
+            audit_id=row["audit_id"],
+            execution_id=row["execution_id"],
+            proposal_id=row["proposal_id"],
+            event_type=row["event_type"],
+            actor_id=row["actor_id"],
+            timestamp=datetime.fromisoformat(row["timestamp"]),
+            details=json.loads(row["details_json"]),
+            prev_audit_hash=row["prev_audit_hash"],
+            audit_hash=row["audit_hash"],
+        )

@@ -108,6 +108,7 @@ class EmulatedSwitchBridge(SwitchAdapterInterface):
         text: str,
         sender: str = "@operator:switch",
         sender_name: str = "Human Operator",
+        metadata: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """
         Simulate a human typing a message into the Switch room.
@@ -120,6 +121,7 @@ class EmulatedSwitchBridge(SwitchAdapterInterface):
             "type": "event",
             "sequence": self.sequence,
             "event": "message",
+            "metadata": metadata or {},
             "payload": {
                 "addressed": is_addressed,
                 "sender": sender,

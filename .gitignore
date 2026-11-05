@@ -47,4 +47,5 @@ Thumbs.db
 *.db-wal
 docker/scratch/
 scratch/
+.cloudpilot/
 

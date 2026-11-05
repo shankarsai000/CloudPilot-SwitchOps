@@ -78,6 +78,32 @@ class ProposedChange(BaseModel):
     proposed_value: Any = None
     action_type: str = Field(default="MODIFY", description="MODIFY, ADD, REMOVE")
 
+    @model_validator(mode="before")
+    @classmethod
+    def populate_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "attribute" in data and not data.get("attribute_path"):
+                data["attribute_path"] = data["attribute"]
+            if "old_value" in data and data.get("current_value") is None:
+                data["current_value"] = data["old_value"]
+            if "new_value" in data and data.get("proposed_value") is None:
+                data["proposed_value"] = data["new_value"]
+            if "action" in data and not data.get("action_type"):
+                data["action_type"] = data["action"]
+        return data
+
+    @property
+    def attribute(self) -> str:
+        return self.attribute_path
+
+    @property
+    def old_value(self) -> Any:
+        return self.current_value
+
+    @property
+    def new_value(self) -> Any:
+        return self.proposed_value
+
 
 class Candidate(BaseModel):
     """

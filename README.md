@@ -4,9 +4,11 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Switch AI Native](https://img.shields.io/badge/Switch-Native%20Integration-6366f1.svg)](https://switchagents.ai/)
-[![Phase 3.2 Release](https://img.shields.io/badge/Release-v3.2.0--phase3--final--verification-blue.svg)](https://github.com/shankarsai000/CloudPilot-SwitchOps)
-[![Tests Passing](https://img.shields.io/badge/All%20Tests-142%20Passed-brightgreen.svg)](tests/)
+[![Phase 4 Release](https://img.shields.io/badge/Release-v4.0.0--phase4--execution-blue.svg)](https://github.com/shankarsai000/CloudPilot-SwitchOps)
+[![Tests Passing](https://img.shields.io/badge/All%20Tests-173%20Passed-brightgreen.svg)](tests/)
 [![Z3 Solver Verified](https://img.shields.io/badge/Formal%20Verification-Z3%20SMT%20Verified-purple.svg)](docs/constraint-engine.md)
+[![Human-in-the-Loop](https://img.shields.io/badge/Governance-HMAC--SHA256%20Approval%20Gated-success.svg)](docs/approval-system.md)
+[![Bounded Execution](https://img.shields.io/badge/Execution-Sandbox%20Isolated-orange.svg)](docs/bounded-execution.md)
 [![SHA-256 Provenance](https://img.shields.io/badge/Evidence%20Provenance-SHA--256%20Verified-teal.svg)](docs/recommendation-model.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey.svg)](LICENSE)
 
@@ -160,6 +162,18 @@ flowchart TD
 - **Tamper-Proof SHA-256 Evidence Provenance**: Generates cryptographic-grade SHA-256 digests over all decision inputs, findings, and policies with independent verification utility.
 - **Strict Read-Only Guarantee**: Operates completely in read-only analysis mode with zero file mutations or live cloud write operations.
 
+### E. Human-in-the-Loop Approval & Bounded Sandbox Execution (`app.services.approval`, `app.services.execution`)
+- **Closed-Loop 9-Stage Lifecycle**: `OBSERVE → ANALYZE → OPTIMIZE → PROPOSE → APPROVE → EXECUTE → VERIFY → RECOVER → AUDIT`.
+- **Proposal-Bound Invariance**: Binds every proposed change to pre-computed before-state and expected after-state SHA-256 hashes. If source files drift, execution is aborted fail-closed.
+- **Cryptographic HMAC-SHA256 Token Issuance**: Time-limited (`ttl_seconds`), nonce-bound, single-use tokens (`v1.<proposal_id>.<nonce>.<timestamp>.<hmac>`) verified with constant-time comparisons (`hmac.compare_digest`).
+- **Strict Role-Based Access Control (RBAC)**: Only authorized engineering leaders (`PLATFORM_LEAD`, `SECURITY_LEAD`, `FINOPS_LEAD`) can issue tokens or approve changes. Unauthorized roles (`OPERATOR`, `DEVELOPER`, `VIEWER`) are rejected with `403 Forbidden`.
+- **Isolated Sandbox Containment**: Mutations execute strictly within `.cloudpilot/workspaces/{execution_id}/`. Source samples (`samples/staging`) remain 100% read-only and unmodified.
+- **Structured Declarative Mutations**: Applies allowlisted HCL and YAML mutations (`MODIFY`, `UPDATE_ATTRIBUTE`, `REPLACE_VALUE`, `ADD_BLOCK`, `ADD`, `REMOVE`) with deterministic newlines (`\n`) for cross-platform hash reproducibility.
+- **Independent Syntax & Hash Verification**: Re-parses modified configurations with `TerraformParser` and `ComposeParser` and verifies that output file hashes match expected proposal hashes bit-for-bit.
+- **Automated Fail-Safe Rollback**: Captures pre-execution snapshots in `.cloudpilot_snapshot/` and automatically restores verified before-state files if syntax verification or hash checks fail.
+- **Cryptographic Hash-Chained Audit Trail**: Append-only event stream where each event is cryptographically linked: $\text{event\_hash}_i = \text{SHA256}(\text{prev\_hash} + \text{payload} + \dots)$.
+- **Zero Live Cloud Mutations**: Strictly guaranteed zero live cloud mutating operations (no `terraform apply`, `terraform destroy`, `pulumi up`, or live cloud provider write API calls).
+
 ---
 
 ## 6. Demonstration Scenarios
@@ -179,16 +193,27 @@ The repository includes realistic infrastructure scenarios in `samples/`:
 
 ## 7. Switch Team Room Workflow
 
-1. In the `cloudpilot-ops` Switch room, an operator submits:
+1. **Infrastructure Investigation**:
    ```text
    @cloudpilot-ops-agent assess ./samples/staging for cost, security and reliability risks. Read-only assessment. Do not modify anything.
    ```
-2. The agent executes through a transparent multi-message stream:
-   - **Acknowledgment**: Immediately confirms request and task ID.
-   - **Discovery Progress**: Reports discovered configuration files, resource count, and scan duration.
-   - **FinOps Report**: `finops-specialist` posts itemized monthly spend and sizing optimization flags.
-   - **SecOps Report**: `secops-specialist` posts vulnerability severity breakdown and critical findings.
-   - **Consolidated Assessment**: Final executive summary with prioritized recommendations for Phase 3 optimization.
+2. **Decision Intelligence & Trade-Off Optimization**:
+   ```text
+   @cloudpilot-ops-agent decide on staging infrastructure optimization. Recommend optimal trade-off balancing cost and security. Read-only.
+   ```
+   - Automatically computes Pareto frontier, runs formal Z3 verification, and posts executive decision summary.
+   - Automatically issues a formal `Proposal` with pre-computed SHA-256 before/after state hashes and announces it in the room.
+3. **Human Approval & Bounded Sandbox Execution**:
+   ```text
+   @cloudpilot-ops-agent approve proposal prop-03b1133ced
+   ```
+   - Authorizes change under caller's verified role (`PLATFORM_LEAD`, `SECURITY_LEAD`, `FINOPS_LEAD`).
+   - Provisions isolated workspace `.cloudpilot/workspaces/{execution_id}`, takes snapshot, applies declarative mutations, validates syntax and hashes, commits execution, and streams verification report to Switch room.
+4. **Human Rejection**:
+   ```text
+   @cloudpilot-ops-agent reject proposal prop-03b1133ced
+   ```
+   - Terminates proposal immediately, marks status `REJECTED`, and records audit reason.
 
 ---
 
@@ -211,27 +236,44 @@ The repository includes realistic infrastructure scenarios in `samples/`:
 - **Get Pareto Frontier**: `GET http://localhost:8000/api/v1/decisions/{decision_id}/pareto`
 - **Get Constraint Violations**: `GET http://localhost:8000/api/v1/decisions/{decision_id}/constraints`
 - **Get Full Decision Report**: `GET http://localhost:8000/api/v1/decisions/{decision_id}/report`
-- **Swagger Documentation**: `http://localhost:8000/docs`
+
+### Phase 4 Proposal, Approval & Bounded Execution Endpoints
+- **Create Proposal**: `POST http://localhost:8000/api/v1/proposals`
+- **List Proposals**: `GET http://localhost:8000/api/v1/proposals?decision_id=...&status=...`
+- **Get Proposal by ID**: `GET http://localhost:8000/api/v1/proposals/{proposal_id}`
+- **Issue Approval Token**: `POST http://localhost:8000/api/v1/approvals/{proposal_id}/token` (Headers: `x-user-id`, `x-user-role`)
+- **Submit Human Approval**: `POST http://localhost:8000/api/v1/approvals/{proposal_id}/approve` (Headers: `x-user-id`, `x-user-role`, Body: `{"token": "..."}`)
+- **Submit Human Rejection**: `POST http://localhost:8000/api/v1/approvals/{proposal_id}/reject` (Headers: `x-user-id`, `x-user-role`, Body: `{"reason": "..."}`)
+- **Get Approval Record**: `GET http://localhost:8000/api/v1/approvals/{proposal_id}`
+- **Execute Approved Proposal**: `POST http://localhost:8000/api/v1/executions/{proposal_id}/execute` (Headers: `x-user-id`, `x-user-role`, Body: `{"token": "...", "target_workspace_root": "samples/staging"}`)
+- **Get Execution Record**: `GET http://localhost:8000/api/v1/executions/{proposal_id}`
+- **Get Cryptographic Audit Trail**: `GET http://localhost:8000/api/v1/executions/{execution_id}/audit`
+- **Swagger UI**: `http://localhost:8000/docs`
 
 ---
 
 ## 9. Running Tests
 
-Run all Phase 1, Phase 2, Phase 3, Phase 3.1 Hardened, and Phase 3.2 Final Verification tests (Unit, Integration, Contract, Formal SMT):
-```powershell
-.venv\Scripts\pytest.exe tests -v
-```
-**Test Results**: **113 passed in 9.20s**
-
-Run complete regression suite including preserved legacy foundation tests:
+Run complete test suite across all phases (Unit, Integration, Contract, Formal SMT, and Foundation tests):
 ```powershell
 .venv\Scripts\pytest.exe tests docker/tests/test_platform_foundation.py -v
 ```
-**Test Results**: **142 passed in 19.01s (100% passing, 0 failures)**
+**Test Results**: **173 passed in 37.07s (100% passing, 0 failures)**
+
+Run Phase 4 Human Approval & Bounded Execution tests specifically:
+```powershell
+.venv\Scripts\pytest.exe tests/unit/test_approval_system.py tests/unit/test_workspace_isolation.py tests/unit/test_bounded_execution.py tests/unit/test_execution_recovery.py tests/integration/test_switch_approval_workflow.py tests/integration/test_execution_api.py -v
+```
+**Test Results**: **31 passed in 7.29s (100% passing, 0 failures)**
 
 ---
 
 ## 10. Documentation Index
+
+### Phase 4 Human Approval & Bounded Execution
+- [Phase 4 Architecture Blueprint](docs/phase4-architecture.md): 9-stage lifecycle, HMAC tokens, isolated sandbox containment, and rollback recovery.
+- [Human Approval System](docs/approval-system.md): Role-based access control, cryptographic token mechanics, and Switch room approval triggers.
+- [Bounded Execution & Safety](docs/bounded-execution.md): Sandbox layout, structured change applier, syntax validation, and hash-chained audit trails.
 
 ### Phase 3 Decision Intelligence Specifications
 - [Decision Intelligence Engine](docs/decision-intelligence.md): Seven-stage pipeline, objective scoring, and formal guarantees.

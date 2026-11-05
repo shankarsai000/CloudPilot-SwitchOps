@@ -50,12 +50,33 @@ from app.domain.objectives import (
     PreferenceProfile,
 )
 from app.domain.policies import PolicyConfiguration
+from app.domain.proposals import Proposal, ProposalStatus
+from app.domain.approvals import (
+    ApprovalPrincipal,
+    ApprovalRecord,
+    ApprovalStatus,
+    ApprovalTokenPayload,
+    ApproverRole,
+    PERMITTED_APPROVAL_ROLES,
+)
+from app.domain.execution import (
+    AuditLogEvent,
+    ExecutionRecord,
+    ExecutionStatus,
+    FileMutationRecord,
+)
 
 __all__ = [
     "ALLOWED_TRANSITIONS",
     "ActorType",
     "ApplicabilityStatus",
+    "ApprovalPrincipal",
+    "ApprovalRecord",
+    "ApprovalStatus",
+    "ApprovalTokenPayload",
+    "ApproverRole",
     "AssessmentSummary",
+    "AuditLogEvent",
     "Candidate",
     "CandidateEvaluation",
     "CandidateInteraction",
@@ -69,6 +90,9 @@ __all__ = [
     "DiscoveredResource",
     "Evidence",
     "EvidenceSeverity",
+    "ExecutionRecord",
+    "ExecutionStatus",
+    "FileMutationRecord",
     "Finding",
     "FindingCategory",
     "FindingSeverity",
@@ -78,10 +102,13 @@ __all__ = [
     "ObjectiveDimension",
     "ObjectiveScores",
     "OperationalComplexity",
+    "PERMITTED_APPROVAL_ROLES",
     "PREFERENCE_WEIGHTS",
     "ParetoStatus",
     "PolicyConfiguration",
     "PreferenceProfile",
+    "Proposal",
+    "ProposalStatus",
     "ProposedChange",
     "ResourceCategory",
     "Task",
