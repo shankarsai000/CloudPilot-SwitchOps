@@ -154,3 +154,4 @@ flowchart TD
 | **Syntax Verification** | Invalid HCL/YAML triggers automatic rollback | `ValidationRunner.validate_execution` | `test_invalid_syntax_triggers_rollback` |
 | **Hash Verification** | Unexpected output hashes trigger rollback | `ValidationRunner._verify_after_state_hashes` | `test_after_state_hash_mismatch_rollback` |
 | **Audit Chaining** | Audit trail is cryptographically tamper-evident | `ExecutionAuditLog.record_event` | `test_cryptographic_audit_trail_chaining` |
+

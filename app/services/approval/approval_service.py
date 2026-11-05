@@ -99,7 +99,7 @@ class ApprovalService:
             if rel_path not in source_file_paths:
                 source_file_paths.append(rel_path)
 
-            # Calculate before-state hash and sequentially accumulate simulated after-state
+            # Calculate before-state hash from actual filesystem if available
             if os.path.isfile(abs_file):
                 try:
                     if rel_path not in before_hashes:

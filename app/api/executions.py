@@ -37,33 +37,20 @@ def get_execution_orchestrator(repo: TaskRepositoryInterface = Depends(get_repos
     return ExecutionOrchestrator(repository=repo)
 
 
+from app.services.approval.auth_provider import ServerSidePrincipalAuthenticator
+
+_authenticator = ServerSidePrincipalAuthenticator()
+
+
 def get_authenticated_principal(
     x_user_id: Optional[str] = Header(None, description="Authenticated principal user ID"),
     x_user_role: Optional[str] = Header(None, description="Authenticated principal role"),
     authorization: Optional[str] = Header(None, description="Bearer token or auth header"),
 ) -> ApprovalPrincipal:
-    if not x_user_id:
-        return ApprovalPrincipal(
-            principal_id="anonymous",
-            display_name="Anonymous Operator",
-            role=ApproverRole.OPERATOR,
-            authenticated=False,
-            auth_mechanism="UNAUTHENTICATED",
-        )
-
-    try:
-        role = ApproverRole(x_user_role.upper()) if x_user_role else ApproverRole.OPERATOR
-    except ValueError:
-        role = ApproverRole.OPERATOR
-
-    is_authenticated = bool(authorization and authorization.startswith("Bearer ")) or bool(x_user_id and x_user_role)
-
-    return ApprovalPrincipal(
-        principal_id=x_user_id,
-        display_name=x_user_id,
-        role=role,
-        authenticated=is_authenticated,
-        auth_mechanism="API_AUTHENTICATED_SESSION" if is_authenticated else "UNAUTHENTICATED",
+    return _authenticator.authenticate(
+        x_user_id=x_user_id,
+        x_user_role=x_user_role,
+        authorization=authorization,
     )
 
 
@@ -137,3 +124,24 @@ async def get_execution_audit_trail_endpoint(
             detail=f"No audit records found for execution '{execution_id}'",
         )
     return events
+
+
+@router.get("/{execution_id}/manifest", summary="Export Cryptographic Audit Manifest")
+async def get_execution_audit_manifest_endpoint(
+    execution_id: str,
+    principal: ApprovalPrincipal = Depends(get_authenticated_principal),
+    orchestrator: ExecutionOrchestrator = Depends(get_execution_orchestrator),
+) -> Dict[str, Any]:
+    if not principal.authenticated or not principal.is_authorized:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Unauthorized: Principal '{principal.principal_id}' lacks authorization to export audit manifest.",
+        )
+    manifest = orchestrator.audit_logger.export_audit_manifest(execution_id)
+    if not manifest["events"]:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No audit records found for execution '{execution_id}'",
+        )
+    return manifest
+

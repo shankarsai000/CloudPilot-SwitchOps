@@ -159,3 +159,4 @@ class TestWorkspaceIsolation:
         assert not os.path.exists(ws_path)
         # Base workspaces directory remains intact
         assert os.path.exists(workspaces_dir)
+

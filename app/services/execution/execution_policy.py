@@ -58,6 +58,7 @@ class ExecutionPolicyEngine:
         token_string: str,
         workspace_root: str,
         policy: Optional[PolicyConfiguration] = None,
+        executing_principal: Optional[ApprovalPrincipal] = None,
     ) -> Tuple[bool, Dict[str, Any], List[str]]:
         """
         Executes complete pre-execution safety checklist.
@@ -65,6 +66,21 @@ class ExecutionPolicyEngine:
         """
         checks: Dict[str, bool] = {}
         failure_reasons: List[str] = []
+
+        # 0. Verify executing principal authorization and role stability
+        if executing_principal is not None:
+            if not executing_principal.is_authorized:
+                checks["executing_principal_authorized"] = False
+                failure_reasons.append(
+                    f"Executing principal '{executing_principal.principal_id}' is not authenticated or lacks authorized role."
+                )
+            elif executing_principal.role not in PERMITTED_APPROVAL_ROLES:
+                checks["executing_principal_authorized"] = False
+                failure_reasons.append(
+                    f"Executing principal role '{executing_principal.role.value}' is not permitted to execute changes."
+                )
+            else:
+                checks["executing_principal_authorized"] = True
 
         # 1. Verify approval token authenticity and expiration
         is_valid_tok, token_payload, tok_err = self.token_manager.verify_token(token_string)
@@ -167,3 +183,4 @@ class ExecutionPolicyEngine:
 
         is_safe = len(failure_reasons) == 0
         return is_safe, checks, failure_reasons
+

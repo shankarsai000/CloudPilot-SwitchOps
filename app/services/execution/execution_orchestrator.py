@@ -110,21 +110,34 @@ class ExecutionOrchestrator:
         now = datetime.now(timezone.utc)
         execution_id = f"exec-{uuid.uuid4().hex[:10]}"
 
-        # A. Retrieve Proposal
+        # A. Authorization and Proposal Retrieval
+        if not approver.is_authorized:
+            raise ApprovalSecurityError(
+                f"Unauthorized: Executing principal '{approver.principal_id}' is not authenticated or lacks required authorization."
+            )
+
         proposal = self.repository.get_proposal(proposal_id)
         if not proposal:
             raise NotFoundError(f"Proposal '{proposal_id}' not found", resource_type="proposal", resource_id=proposal_id)
 
-        # B. Retrieve Approval Record
+        # B. Retrieve Approval Record and Atomic CAS Claim
         approval = self.repository.get_approval_for_proposal(proposal_id)
         if not approval:
             raise ApprovalSecurityError(
                 f"Execution blocked: Proposal '{proposal_id}' has not been approved by a human."
             )
 
-        if approval.status != ApprovalStatus.APPROVED:
+        if approval.status != ApprovalStatus.APPROVED or approval.consumed_at is not None:
             raise ApprovalSecurityError(
-                f"Execution blocked: Proposal status is '{approval.status.value}', expected APPROVED."
+                f"Execution blocked: Approval '{approval.approval_id}' status is '{approval.status.value}', expected APPROVED and unconsumed."
+            )
+
+        # Atomic Compare-And-Swap claim of approval and execution slot
+        claimed = self.repository.claim_approval_for_execution(approval.approval_id, proposal.proposal_id)
+        if not claimed:
+            raise ApprovalSecurityError(
+                f"Execution conflict: Approval '{approval.approval_id}' for proposal '{proposal_id}' "
+                f"has already been claimed, consumed, or executed by another request."
             )
 
         # Initialize Execution Record
@@ -157,6 +170,7 @@ class ExecutionOrchestrator:
             token_string=token_string,
             workspace_root=source_workspace,
             policy=policy,
+            executing_principal=approver,
         )
 
         self.audit_logger.log_event(
@@ -172,6 +186,8 @@ class ExecutionOrchestrator:
             execution.error_message = "; ".join(reasons)
             execution.mark_failed(execution.error_message)
             self.repository.update_execution(execution)
+            proposal.status = ProposalStatus.FAILED
+            self.repository.update_proposal(proposal)
             raise PreExecutionCheckError(f"Pre-execution safety checks failed: {reasons}")
 
         execution.status = ExecutionStatus.PRE_CHECK_PASSED
@@ -344,6 +360,8 @@ class ExecutionOrchestrator:
 
         if restored_ok:
             execution.mark_rolled_back(f"Rolled back {len(restored_files)} files. Reason: {reason}")
+            proposal.status = ProposalStatus.FAILED
+            self.repository.update_proposal(proposal)
             self.audit_logger.log_event(
                 execution_id=execution.execution_id,
                 proposal_id=proposal.proposal_id,
@@ -354,6 +372,8 @@ class ExecutionOrchestrator:
         else:
             execution.status = ExecutionStatus.RECOVERY_FAILED
             execution.error_message = f"Rollback failed: {rec_err}. Original trigger: {reason}"
+            proposal.status = ProposalStatus.FAILED
+            self.repository.update_proposal(proposal)
             self.audit_logger.log_event(
                 execution_id=execution.execution_id,
                 proposal_id=proposal.proposal_id,

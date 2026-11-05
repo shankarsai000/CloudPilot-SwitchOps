@@ -103,3 +103,37 @@ class ExecutionAuditLogger:
             expected_prev = evt.audit_hash
 
         return True, None
+
+    def export_audit_manifest(self, execution_id: str) -> Dict[str, Any]:
+        """
+        Exports a self-verifying audit manifest for an execution run.
+        Includes cryptographic digest and per-event summaries.
+        """
+        events = self.repository.get_audit_events_for_execution(execution_id)
+        is_valid, err = self.verify_audit_trail(execution_id)
+        genesis = hashlib.sha256(f"GENESIS-{execution_id}".encode("utf-8")).hexdigest()
+        final_hash = events[-1].audit_hash if events else genesis
+
+        manifest_data = {
+            "execution_id": execution_id,
+            "event_count": len(events),
+            "genesis_hash": genesis,
+            "final_audit_hash": final_hash,
+            "chain_valid": is_valid,
+            "validation_error": err,
+            "events": [
+                {
+                    "audit_id": e.audit_id,
+                    "event_type": e.event_type,
+                    "actor_id": e.actor_id,
+                    "timestamp": e.timestamp.isoformat(),
+                    "prev_audit_hash": e.prev_audit_hash,
+                    "audit_hash": e.audit_hash,
+                }
+                for e in events
+            ],
+        }
+        canonical = json.dumps(manifest_data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        manifest_data["manifest_digest_sha256"] = hashlib.sha256(canonical).hexdigest()
+        return manifest_data
+

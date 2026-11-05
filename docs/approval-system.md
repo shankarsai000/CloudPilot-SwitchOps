@@ -126,3 +126,4 @@ To reject this change:
 @cloudpilot-ops-agent approve proposal prop-03b1133ced
 ```
 The coordinator inspects the sender's role from event metadata, validates permissions, issues the HMAC token, updates the proposal status to `APPROVED`, and automatically initiates bounded sandbox execution.
+
