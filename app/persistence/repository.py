@@ -213,6 +213,13 @@ class TaskRepositoryInterface(ABC):
         """Update approval record state."""
 
     @abstractmethod
+    def claim_approval_for_execution(self, approval_id: str, proposal_id: str) -> bool:
+        """
+        Atomically transition an approval from APPROVED to CONSUMED.
+        Returns True if claimed by caller, False if already claimed, consumed, or invalid.
+        """
+
+    @abstractmethod
     def save_execution(self, execution: ExecutionRecord) -> ExecutionRecord:
         """Persist an execution record."""
 
@@ -491,8 +498,31 @@ class InMemoryTaskRepository(TaskRepositoryInterface):
             self._approvals[approval.approval_id] = approval.model_copy(deep=True)
             return approval.model_copy(deep=True)
 
+    def claim_approval_for_execution(self, approval_id: str, proposal_id: str) -> bool:
+        with self._lock:
+            appr = self._approvals.get(approval_id)
+            if not appr or appr.status != ApprovalStatus.APPROVED or appr.consumed_at is not None:
+                return False
+            # Check if proposal already has an execution registered
+            if proposal_id in self._executions_by_proposal:
+                return False
+            appr.status = ApprovalStatus.CONSUMED
+            appr.consumed_at = datetime.now(timezone.utc)
+            self._approvals[approval_id] = appr
+            # Also update proposal status to EXECUTING
+            prop = self._proposals.get(proposal_id)
+            if prop:
+                prop.status = ProposalStatus.EXECUTING
+                self._proposals[proposal_id] = prop
+            return True
+
     def save_execution(self, execution: ExecutionRecord) -> ExecutionRecord:
         with self._lock:
+            if execution.execution_id not in self._executions and execution.proposal_id in self._executions_by_proposal:
+                raise ValueError(
+                    f"Execution conflict: Proposal '{execution.proposal_id}' already has execution "
+                    f"'{self._executions_by_proposal[execution.proposal_id]}'"
+                )
             self._executions[execution.execution_id] = execution.model_copy(deep=True)
             self._executions_by_proposal[execution.proposal_id] = execution.execution_id
             return execution.model_copy(deep=True)
@@ -804,6 +834,7 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_executions_proposal_id ON executions(proposal_id);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_executions_unique_proposal ON executions(proposal_id);
                 CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
 
                 CREATE TABLE IF NOT EXISTS execution_audit_events (
@@ -1589,6 +1620,40 @@ class SQLiteTaskRepository(TaskRepositoryInterface):
 
     def update_approval(self, approval: ApprovalRecord) -> ApprovalRecord:
         return self.save_approval(approval)
+
+    def claim_approval_for_execution(self, approval_id: str, proposal_id: str) -> bool:
+        with self._lock, self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 1. Check if execution already exists for this proposal
+            existing_exec = cursor.execute(
+                "SELECT execution_id FROM executions WHERE proposal_id = ?",
+                (proposal_id,),
+            ).fetchone()
+            if existing_exec:
+                return False
+
+            # 2. Atomic Compare-And-Swap on approval status
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cursor.execute(
+                """
+                UPDATE approvals
+                SET status = 'CONSUMED', consumed_at = ?
+                WHERE approval_id = ? AND status = 'APPROVED' AND consumed_at IS NULL
+                """,
+                (now_iso, approval_id),
+            )
+            claimed = cursor.rowcount > 0
+            if claimed:
+                cursor.execute(
+                    """
+                    UPDATE proposals
+                    SET status = 'EXECUTING'
+                    WHERE proposal_id = ? AND status = 'APPROVED'
+                    """,
+                    (proposal_id,),
+                )
+            conn.commit()
+            return claimed
 
     def save_execution(self, execution: ExecutionRecord) -> ExecutionRecord:
         with self._lock, self._get_connection() as conn:

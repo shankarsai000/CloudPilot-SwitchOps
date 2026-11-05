@@ -51,8 +51,28 @@ class ChangeApplier:
                 )
 
             src_file_rel = ch.source_file or "main.tf"
+            if os.path.isabs(src_file_rel):
+                raise ChangeApplicationError(f"Absolute path forbidden in change target: '{src_file_rel}'")
+
             clean_rel = os.path.normpath(src_file_rel).replace("\\", "/")
-            target_file = os.path.join(workspace_path, clean_rel)
+            if clean_rel.startswith("../") or clean_rel == "..":
+                raise ChangeApplicationError(f"Path traversal detected in change target: '{src_file_rel}'")
+
+            # Validate file extension
+            _, ext = os.path.splitext(clean_rel.lower())
+            if ext not in {".tf", ".tfvars", ".yml", ".yaml"}:
+                raise ChangeApplicationError(
+                    f"Prohibited file type '{ext}' for mutation on '{clean_rel}'. "
+                    f"Only Terraform HCL and Docker Compose YAML may be modified."
+                )
+
+            norm_ws = os.path.realpath(os.path.abspath(workspace_path))
+            target_file = os.path.realpath(os.path.abspath(os.path.join(norm_ws, clean_rel)))
+            if not target_file.startswith(norm_ws + os.sep) and target_file != norm_ws:
+                raise ChangeApplicationError(f"Target file escape detected: '{clean_rel}' outside workspace")
+
+            if os.path.islink(target_file):
+                raise ChangeApplicationError(f"Symlink mutation forbidden: '{clean_rel}' is a symbolic link")
 
             if not os.path.isfile(target_file):
                 # If target file doesn't exist, create an initial minimal declarative scaffold
@@ -68,6 +88,12 @@ class ChangeApplier:
 
             # Apply structured modification
             modified_text = self._apply_structured_mutation(text, ch, clean_rel)
+
+            # Break hard links if any before writing to prevent mutating hard-linked sources
+            if os.path.exists(target_file):
+                stat_info = os.stat(target_file)
+                if stat_info.st_nlink > 1:
+                    os.unlink(target_file)
 
             # Write updated file back to isolated workspace
             with open(target_file, "w", encoding="utf-8", newline="\n") as f:

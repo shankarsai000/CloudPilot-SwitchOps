@@ -109,3 +109,4 @@ The system provides a verification endpoint (`GET /api/v1/executions/{execution_
 Every execution record, API response, and Switch room execution announcement includes the mandatory non-mutation safety disclaimer:
 
 > **SAFETY NOTICE: CloudPilot Bounded Execution operates exclusively at the repository and configuration file level within isolated workspace sandboxes. It does NOT invoke 'terraform apply', 'pulumi up', or execute live cloud mutating APIs. Changes must be reviewed, committed to version control, and applied through your organization's approved CI/CD pipeline.**
+

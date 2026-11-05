@@ -27,16 +27,22 @@ class ApprovalStatus(str, Enum):
 class ApproverRole(str, Enum):
     """Authorized human approver roles."""
     PLATFORM_LEAD = "PLATFORM_LEAD"
+    SECURITY_LEAD = "SECURITY_LEAD"
+    FINOPS_LEAD = "FINOPS_LEAD"
     SRE_ADMIN = "SRE_ADMIN"
     FINOPS_ADMIN = "FINOPS_ADMIN"
     SECURITY_ADMIN = "SECURITY_ADMIN"
     CLOUD_OPS_LEAD = "CLOUD_OPS_LEAD"
     OPERATOR = "OPERATOR"  # Non-authoritative (cannot approve hard changes)
+    DEVELOPER = "DEVELOPER"
+    VIEWER = "VIEWER"
 
 
 # Authorized roles permitted to approve infrastructure mutations
 PERMITTED_APPROVAL_ROLES = {
     ApproverRole.PLATFORM_LEAD,
+    ApproverRole.SECURITY_LEAD,
+    ApproverRole.FINOPS_LEAD,
     ApproverRole.SRE_ADMIN,
     ApproverRole.FINOPS_ADMIN,
     ApproverRole.SECURITY_ADMIN,
@@ -128,3 +134,4 @@ class ApprovalRecord(BaseModel):
         """Marks the approval as single-use consumed upon execution initiation."""
         self.status = ApprovalStatus.CONSUMED
         self.consumed_at = now or datetime.now(timezone.utc)
+

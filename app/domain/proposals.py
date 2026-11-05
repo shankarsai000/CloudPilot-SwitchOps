@@ -28,6 +28,8 @@ class ProposalStatus(str, Enum):
     EXPIRED = "EXPIRED"
     EXECUTING = "EXECUTING"
     EXECUTED = "EXECUTED"
+    FAILED = "FAILED"
+    ROLLED_BACK = "ROLLED_BACK"
     CANCELLED = "CANCELLED"
 
 
@@ -127,3 +129,4 @@ class Proposal(BaseModel):
             "expected_after_state_file_hashes": dict(sorted(self.expected_after_state_file_hashes.items())),
             "expires_at": self.expires_at.isoformat(),
         }
+

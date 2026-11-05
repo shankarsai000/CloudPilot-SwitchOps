@@ -93,6 +93,13 @@ class RecoveryManager:
                             f"expected {expected_hash[:16]}, got {restored_hash[:16]}",
                         )
                     restored_files.append(clean_rel)
+                elif expected_hash:
+                    # Expected an existing file before mutation, but snapshot file is missing
+                    return (
+                        False,
+                        restored_files,
+                        f"Missing snapshot backup file for '{clean_rel}'; cannot restore verified before-state",
+                    )
                 elif os.path.isfile(target_file):
                     # File was newly created during execution; delete it to restore before-state
                     os.remove(target_file)
@@ -104,3 +111,4 @@ class RecoveryManager:
         except Exception as exc:
             logger.error("File recovery failed with unhandled error: %s", exc)
             return False, restored_files, f"File recovery error: {exc}"
+

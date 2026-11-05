@@ -33,37 +33,24 @@ def get_approval_service(repo: TaskRepositoryInterface = Depends(get_repository)
     return ApprovalService(repository=repo)
 
 
+from app.services.approval.auth_provider import ServerSidePrincipalAuthenticator
+
+_authenticator = ServerSidePrincipalAuthenticator()
+
+
 def get_authenticated_principal(
     x_user_id: Optional[str] = Header(None, description="Authenticated principal user ID"),
     x_user_role: Optional[str] = Header(None, description="Authenticated principal role"),
     authorization: Optional[str] = Header(None, description="Bearer token or auth header"),
 ) -> ApprovalPrincipal:
     """
-    Extracts and authenticates the requesting operator principal.
-    Fails closed if authentication headers are missing or role is not permitted.
+    Extracts and authenticates the requesting operator principal using server-side directory.
+    Fails closed if authentication headers are missing, spoofed, or role is escalated.
     """
-    if not x_user_id:
-        return ApprovalPrincipal(
-            principal_id="anonymous",
-            display_name="Anonymous Operator",
-            role=ApproverRole.OPERATOR,
-            authenticated=False,
-            auth_mechanism="UNAUTHENTICATED",
-        )
-
-    try:
-        role = ApproverRole(x_user_role.upper()) if x_user_role else ApproverRole.OPERATOR
-    except ValueError:
-        role = ApproverRole.OPERATOR
-
-    is_authenticated = bool(authorization and authorization.startswith("Bearer ")) or bool(x_user_id and x_user_role)
-
-    return ApprovalPrincipal(
-        principal_id=x_user_id,
-        display_name=x_user_id,
-        role=role,
-        authenticated=is_authenticated,
-        auth_mechanism="API_AUTHENTICATED_SESSION" if is_authenticated else "UNAUTHENTICATED",
+    return _authenticator.authenticate(
+        x_user_id=x_user_id,
+        x_user_role=x_user_role,
+        authorization=authorization,
     )
 
 
@@ -268,3 +255,4 @@ async def get_approval_endpoint(
             detail=f"No approval record found for proposal '{proposal_id}'",
         )
     return record
+
