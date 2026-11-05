@@ -148,19 +148,33 @@ class ConstraintEngine:
 
             # Invariant hardening: Drop persistence & disable auth must always be False
             for c in candidates:
-                if c.candidate_type in (CandidateType.DROP_PERSISTENCE, CandidateType.DISABLE_AUTH):
+                if (
+                    c.candidate_type in (CandidateType.DROP_PERSISTENCE, CandidateType.DISABLE_AUTH)
+                    or "DROP_PERSISTENCE" in c.evidence.get("member_candidate_types", [])
+                    or "DISABLE_AUTH" in c.evidence.get("member_candidate_types", [])
+                ):
                     solver.add(z3.Not(candidate_vars[c.candidate_id]))
+                    rejected_by_invariant.setdefault(c.candidate_id, []).append("CONST-SEC-01/CONST-REL-01")
 
             # 3. Encode Financial Budget Ceiling Constraint in Z3 Real Arithmetic
             if self.policy.monthly_budget_ceiling is not None:
                 try:
                     budget_ceiling = z3.RealVal(str(self.policy.monthly_budget_ceiling))
                     for c in candidates:
+                        # Missing or unknown pricing cannot silently produce an apparently safe result
+                        if c.evidence.get("has_unknown_pricing") or c.applicability in (
+                            ApplicabilityStatus.UNSUPPORTED,
+                            ApplicabilityStatus.UNKNOWN,
+                        ):
+                            solver.add(z3.Not(candidate_vars[c.candidate_id]))
+                            rejected_by_invariant.setdefault(c.candidate_id, []).append("CONST-FIN-01")
+                            continue
                         try:
                             c_after = z3.RealVal(str(c.estimated_monthly_cost_after))
+                            solver.add(z3.Implies(candidate_vars[c.candidate_id], c_after <= budget_ceiling))
                         except Exception:
-                            c_after = z3.RealVal("0.0")
-                        solver.add(z3.Implies(candidate_vars[c.candidate_id], c_after <= budget_ceiling))
+                            solver.add(z3.Not(candidate_vars[c.candidate_id]))
+                            rejected_by_invariant.setdefault(c.candidate_id, []).append("CONST-FIN-01")
                 except Exception as b_err:
                     logger.warning("Error encoding budget ceiling in Z3: %s", b_err)
 
@@ -194,6 +208,23 @@ class ConstraintEngine:
                     for c in candidates
                     if z3.is_true(model.eval(candidate_vars[c.candidate_id]))
                 ]
+
+                # Defensive post-check: verify decoded model satisfies all invariants
+                for sel_id in selected_sample:
+                    if sel_id in rejected_by_invariant:
+                        raise ValueError(
+                            f"Solver model selected candidate {sel_id} which violates invariants: {rejected_by_invariant[sel_id]}"
+                        )
+
+                if interactions:
+                    sel_set = set(selected_sample)
+                    for inter in interactions:
+                        if inter.interaction_type in (InteractionType.CONFLICTING, InteractionType.REDUNDANT):
+                            intersecting = [cid for cid in inter.candidate_ids if cid in sel_set]
+                            if len(intersecting) > 1:
+                                raise ValueError(
+                                    f"Solver model selected mutually conflicting candidates: {intersecting}"
+                                )
                 logger.info(
                     "Z3 SMT verification SATISFIED across %d candidate(s) (assertions=%d)",
                     len(candidates),
@@ -251,6 +282,29 @@ class ConstraintEngine:
                 evidence_refs={"applicability": candidate.applicability.value},
                 policy_version=self.policy.policy_version,
             )
+        if candidate.applicability == ApplicabilityStatus.UNKNOWN:
+            return ConstraintResult(
+                constraint_id="CONST-OPS-01",
+                constraint_type=ConstraintType.OPERATIONAL,
+                severity=ConstraintSeverity.MANDATORY,
+                status=ConstraintStatus.UNKNOWN,
+                reason="Candidate has unknown infrastructure attributes or unverified applicability.",
+                affected_candidate_ids=[candidate.candidate_id],
+                evidence_refs={"applicability": candidate.applicability.value},
+                policy_version=self.policy.policy_version,
+            )
+        for ch in candidate.proposed_changes:
+            if ch.attribute_path in ("unknown", "unsupported", "invalid"):
+                return ConstraintResult(
+                    constraint_id="CONST-OPS-01",
+                    constraint_type=ConstraintType.OPERATIONAL,
+                    severity=ConstraintSeverity.MANDATORY,
+                    status=ConstraintStatus.FAIL,
+                    reason=f"Candidate proposes transformation on unresolvable/unknown attribute '{ch.attribute_path}'.",
+                    affected_candidate_ids=[candidate.candidate_id],
+                    evidence_refs={"attribute": ch.attribute_path},
+                    policy_version=self.policy.policy_version,
+                )
         return ConstraintResult(
             constraint_id="CONST-OPS-01",
             constraint_type=ConstraintType.OPERATIONAL,
@@ -262,14 +316,17 @@ class ConstraintEngine:
         )
 
     def _check_const_sec_01_public_database(self, candidate: Candidate) -> ConstraintResult:
-        # Check if candidate explicitly opens database ports or is an anti-pattern candidate
-        if candidate.candidate_type == CandidateType.DISABLE_AUTH:
+        # Check if candidate explicitly opens database ports or is an anti-pattern candidate (atomic or member)
+        if (
+            candidate.candidate_type == CandidateType.DISABLE_AUTH
+            or "DISABLE_AUTH" in candidate.evidence.get("member_candidate_types", [])
+        ):
             return ConstraintResult(
                 constraint_id="CONST-SEC-01",
                 constraint_type=ConstraintType.SECURITY,
                 severity=ConstraintSeverity.MANDATORY,
                 status=ConstraintStatus.FAIL,
-                reason="HARD CONSTRAINT VIOLATION: Candidate proposes public internet binding (0.0.0.0) for database listener.",
+                reason="HARD CONSTRAINT VIOLATION: Candidate proposes public internet binding (0.0.0.0) or disabling auth for database listener.",
                 affected_candidate_ids=[candidate.candidate_id],
                 evidence_refs={"candidate_type": candidate.candidate_type.value},
                 policy_version=self.policy.policy_version,
@@ -417,13 +474,16 @@ class ConstraintEngine:
         )
 
     def _check_const_rel_01_stateful_persistence(self, candidate: Candidate) -> ConstraintResult:
-        if candidate.candidate_type == CandidateType.DROP_PERSISTENCE:
+        if (
+            candidate.candidate_type == CandidateType.DROP_PERSISTENCE
+            or "DROP_PERSISTENCE" in candidate.evidence.get("member_candidate_types", [])
+        ):
             return ConstraintResult(
                 constraint_id="CONST-REL-01",
                 constraint_type=ConstraintType.RELIABILITY,
                 severity=ConstraintSeverity.MANDATORY,
                 status=ConstraintStatus.FAIL,
-                reason="HARD CONSTRAINT VIOLATION: Candidate irrevocably drops persistent storage volume on a stateful database.",
+                reason="[CONST-REL-01] HARD CONSTRAINT VIOLATION: Candidate irrevocably drops persistent storage volume on a stateful database.",
                 affected_candidate_ids=[candidate.candidate_id],
                 evidence_refs={"candidate_type": candidate.candidate_type.value},
                 policy_version=self.policy.policy_version,
@@ -484,9 +544,21 @@ class ConstraintEngine:
                 policy_version=self.policy.policy_version,
             )
 
+        if candidate.evidence.get("has_unknown_pricing"):
+            return ConstraintResult(
+                constraint_id="CONST-FIN-01",
+                constraint_type=ConstraintType.FINANCIAL,
+                severity=ConstraintSeverity.MANDATORY,
+                status=ConstraintStatus.UNKNOWN,
+                reason="Candidate contains unknown or unparseable pricing data; fail-closed under budget ceiling policy.",
+                affected_candidate_ids=[candidate.candidate_id],
+                evidence_refs={"has_unknown_pricing": True},
+                policy_version=self.policy.policy_version,
+            )
+
         try:
-            ceiling = Decimal(ceiling_str)
-            cost_after = Decimal(candidate.estimated_monthly_cost_after)
+            ceiling = Decimal(str(ceiling_str))
+            cost_after = Decimal(str(candidate.estimated_monthly_cost_after))
         except Exception:
             return ConstraintResult(
                 constraint_id="CONST-FIN-01",

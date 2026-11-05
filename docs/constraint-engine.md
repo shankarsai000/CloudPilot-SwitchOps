@@ -50,3 +50,21 @@ Beyond heuristic rules, CloudPilot uses Microsoft's **Z3 SMT Solver** (`z3-solve
 - `Z3_UNKNOWN`: Solver timed out or could not prove satisfiability within configured timeout boundaries.
 - `Z3_UNAVAILABLE`: The native `z3-solver` package is not available in the execution environment; truth-preserving fallback is reported without faking SAT.
 - `RULE_ENGINE_VALIDATED`: Verification was performed via deterministic rule evaluation when solver was intentionally bypassed or candidate pool was empty.
+
+---
+
+## 4. Aggregate Combination Budget Verification & Fail-Closed Guarantees
+
+Phase 3.2 establishes rigorous release-gate verifications across composite change plans and solver semantics:
+
+### Aggregate Budget Invariant
+- **Individual vs. Composite Feasibility**: An individual candidate $c_1$ ($80/mo) and $c_2$ ($70/mo) may each satisfy a budget ceiling ($100/mo) in isolation. However, their bounded composite plan $C = c_1 + c_2$ ($150/mo) strictly violates the ceiling and is rejected with `is_feasible = False`.
+- **Decimal Precision**: All cost aggregation is executed using Python `Decimal` arithmetic rounded to 2 decimal places (`ROUND_HALF_UP`) to prevent IEEE-754 binary floating point precision drift.
+- **Double-Counting Prevention**: When multiple candidates modify the same resource on different attributes, the resource's baseline OpEx is registered once by resource ID.
+- **Fail-Closed Unknown Pricing**: If any candidate or composite member has missing, corrupted, or unparseable pricing data, `CONST-FIN-01` returns `ConstraintStatus.UNKNOWN` with `is_blocking = True`. In Z3, unparseable pricing is strictly asserted as $\neg x_i$ rather than defaulting to $0.00.
+
+### Decoded Model Defensive Verification
+When Z3 returns `sat`, the solver model is defensively decoded:
+1. Every candidate ID in `selected_sample` is checked against `rejected_by_invariant`. If any invariant-violating candidate is present in the model, an exception is raised.
+2. Mutually exclusive or conflicting candidates in `selected_sample` are checked against candidate interactions. If more than one conflicting candidate is selected, an exception is raised.
+This guarantees the solver can never return an incomplete or invalid candidate combination.

@@ -4,8 +4,8 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Switch AI Native](https://img.shields.io/badge/Switch-Native%20Integration-6366f1.svg)](https://switchagents.ai/)
-[![Phase 3.1 Release](https://img.shields.io/badge/Release-v3.1.0--phase3--hardening-blue.svg)](https://github.com/shankarsai000/CloudPilot-SwitchOps)
-[![Tests Passing](https://img.shields.io/badge/All%20Tests-118%20Passed-brightgreen.svg)](tests/)
+[![Phase 3.2 Release](https://img.shields.io/badge/Release-v3.2.0--phase3--final--verification-blue.svg)](https://github.com/shankarsai000/CloudPilot-SwitchOps)
+[![Tests Passing](https://img.shields.io/badge/All%20Tests-142%20Passed-brightgreen.svg)](tests/)
 [![Z3 Solver Verified](https://img.shields.io/badge/Formal%20Verification-Z3%20SMT%20Verified-purple.svg)](docs/constraint-engine.md)
 [![SHA-256 Provenance](https://img.shields.io/badge/Evidence%20Provenance-SHA--256%20Verified-teal.svg)](docs/recommendation-model.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey.svg)](LICENSE)
@@ -217,17 +217,17 @@ The repository includes realistic infrastructure scenarios in `samples/`:
 
 ## 9. Running Tests
 
-Run all Phase 1, Phase 2, Phase 3, and Phase 3.1 Hardened tests (Unit, Integration, Contract, Formal SMT):
+Run all Phase 1, Phase 2, Phase 3, Phase 3.1 Hardened, and Phase 3.2 Final Verification tests (Unit, Integration, Contract, Formal SMT):
 ```powershell
 .venv\Scripts\pytest.exe tests -v
 ```
-**Test Results**: **89 passed in 8.35s**
+**Test Results**: **113 passed in 9.20s**
 
 Run complete regression suite including preserved legacy foundation tests:
 ```powershell
 .venv\Scripts\pytest.exe tests docker/tests/test_platform_foundation.py -v
 ```
-**Test Results**: **118 passed in 27.09s (100% passing, 0 failures)**
+**Test Results**: **142 passed in 19.01s (100% passing, 0 failures)**
 
 ---
 

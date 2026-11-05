@@ -104,6 +104,7 @@ class Candidate(BaseModel):
     applicability: ApplicabilityStatus = Field(default=ApplicabilityStatus.APPLICABLE)
     reversibility: str = Field(default="HIGH", description="HIGH, MEDIUM, LOW")
     member_candidate_ids: List[str] = Field(default_factory=list, description="IDs of component candidates if COMPOSITE_PLAN")
+    proposal_hash: Optional[str] = Field(default=None, description="Deterministic SHA256 digest of proposed mutations")
     assessment_id: Optional[str] = Field(default=None, description="Assessment provenance reference")
     pricing_catalog_version: str = Field(default="1.0")
     policy_version: str = Field(default="1.0")
@@ -131,6 +132,28 @@ class Candidate(BaseModel):
             elif "affected_resource_ids" in data and "target_resource_ids" not in data:
                 data["target_resource_ids"] = data["affected_resource_ids"]
         return data
+
+    @model_validator(mode="after")
+    def ensure_proposal_hash(self) -> Candidate:
+        if not self.proposal_hash:
+            self.proposal_hash = self.compute_proposal_hash()
+        return self
+
+    def compute_proposal_hash(self) -> str:
+        """Computes a deterministic SHA256 digest of the proposed attribute mutations."""
+        import hashlib, json
+        payload = [
+            {
+                "resource_id": ch.resource_id,
+                "attribute_path": ch.attribute_path,
+                "current_value": str(ch.current_value),
+                "proposed_value": str(ch.proposed_value),
+                "action_type": ch.action_type,
+            }
+            for ch in sorted(self.proposed_changes, key=lambda x: (x.resource_id, x.attribute_path))
+        ]
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest()
 
     @property
     def is_cost_saving(self) -> bool:

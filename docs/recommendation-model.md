@@ -86,3 +86,24 @@ from app.services.decision.recommendation_engine import verify_report_provenance
 is_intact = verify_report_provenance(report)
 # Returns True if genuine; returns False if any finding, policy, or score was tampered with
 ```
+
+---
+
+## 4. Phase 4 Execution Safety Preconditions & Trust Boundary Disclosure
+
+### Phase 4 Safety Preconditions Checklist
+Before Phase 4 Human-in-the-Loop Approval and Bounded Execution can execute any modification, the execution runtime requires and validates:
+1. **DecisionRun ID**: Globally unique run identifier (`decision_id`).
+2. **Selected Candidate Proposal**: Explicit atomic candidate or composite plan (`recommended_candidate`).
+3. **Canonical Proposal Representation**: Deterministic, typed list of proposed resource mutations (`proposed_changes`).
+4. **Proposal Hash (`proposal_hash`)**: Cryptographic SHA-256 digest over the canonical JSON representation of sorted mutations.
+5. **Source Evidence & Affected Resources**: Traceable finding references (`source_finding_ids`) and affected infrastructure resource IDs (`affected_resource_ids`).
+6. **Policy & Pricing Catalog Versions**: Explicit versions recorded for reproducible evaluation (`policy_version`, `pricing_catalog_version`).
+7. **Constraint Verification Verdict**: Formal Z3 status (`Z3_CONSTRAINTS_SAT`) and individual rule passing statuses.
+8. **Explicit Optimization Scope**: Explicit bounded scope (`BOUNDED_COMBINATION (k=3)`).
+9. **Rejected Alternatives Audit**: Complete list of infeasible candidates with specific violated constraint IDs and reasons (`rejected_candidates`).
+
+### Local SQLite Trust Boundary Honest Disclosure
+- **In-Flight & Audit Integrity**: The SHA-256 `provenance_hash` and `proposal_hash` provide deterministic tamper detection against accidental data corruption, communication tampering, or unauthorized runtime modifications between decision generation and human approval.
+- **Storage Boundary**: CloudPilot SwitchOps persists decision records and reports into SQLite (`cloudpilot.db`). Because SQLite is a local file-based database without an external Hardware Security Module (HSM), KMS-backed asymmetric signature, or immutable public transparency log (e.g., Sigstore Rekor), an administrator with direct filesystem write access to the SQLite database file could alter both the report and the stored hash.
+- **Production Hardening**: For enterprise production environments requiring non-repudiation, the trust boundary should be anchored to an external HSM, KMS digital signatures, or an append-only transparency ledger.

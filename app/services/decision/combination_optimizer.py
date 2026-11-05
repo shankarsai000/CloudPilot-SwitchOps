@@ -170,25 +170,51 @@ class CombinationOptimizer:
         # Financial aggregation using Decimal
         total_savings = Decimal("0.00")
         total_cost_before = Decimal("0.00")
-        total_cost_after = Decimal("0.00")
+        resource_costs_before: Dict[str, Decimal] = {}
+        unassociated_cost_before = Decimal("0.00")
+        has_unknown_pricing = False
 
         for m in sorted_members:
             try:
-                total_savings += Decimal(m.estimated_monthly_savings)
+                savings_dec = Decimal(str(m.estimated_monthly_savings))
+                total_savings += savings_dec
             except Exception:
-                pass
+                has_unknown_pricing = True
+
             try:
-                total_cost_before += Decimal(m.estimated_monthly_cost_before)
+                cb_dec = Decimal(str(m.estimated_monthly_cost_before))
+                if m.affected_resource_ids:
+                    for r_id in m.affected_resource_ids:
+                        if r_id not in resource_costs_before:
+                            resource_costs_before[r_id] = cb_dec
+                        else:
+                            resource_costs_before[r_id] = max(resource_costs_before[r_id], cb_dec)
+                else:
+                    unassociated_cost_before += cb_dec
             except Exception:
-                pass
-            try:
-                total_cost_after += Decimal(m.estimated_monthly_cost_after)
-            except Exception:
-                pass
+                has_unknown_pricing = True
+
+        if resource_costs_before:
+            total_cost_before = sum(resource_costs_before.values(), Decimal("0.00")) + unassociated_cost_before
+        else:
+            for m in sorted_members:
+                try:
+                    total_cost_before += Decimal(str(m.estimated_monthly_cost_before))
+                except Exception:
+                    pass
 
         total_savings = total_savings.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
         total_cost_before = total_cost_before.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
-        total_cost_after = total_cost_after.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
+        total_cost_after = (total_cost_before - total_savings).quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
+
+        # Inherit applicability: if any member is UNSUPPORTED or UNKNOWN, composite inherits it
+        combined_applicability = ApplicabilityStatus.APPLICABLE
+        if any(m.applicability == ApplicabilityStatus.UNSUPPORTED for m in sorted_members):
+            combined_applicability = ApplicabilityStatus.UNSUPPORTED
+        elif any(m.applicability == ApplicabilityStatus.UNKNOWN for m in sorted_members):
+            combined_applicability = ApplicabilityStatus.UNKNOWN
+        elif has_unknown_pricing:
+            combined_applicability = ApplicabilityStatus.UNKNOWN
 
         # Security impact aggregation (pessimistic / monotonic)
         combined_sec = self._aggregate_impact_level([m.security_impact for m in sorted_members])
@@ -244,10 +270,12 @@ class CombinationOptimizer:
             assumptions=all_assumptions,
             evidence={
                 "member_candidate_ids": member_ids,
+                "member_candidate_types": [m.candidate_type.value for m in sorted_members],
                 "combination_size": len(member_ids),
                 "optimization_scope": "BOUNDED_COMBINATION (k=3)",
+                "has_unknown_pricing": has_unknown_pricing,
             },
-            applicability=ApplicabilityStatus.APPLICABLE,
+            applicability=combined_applicability,
             reversibility=reversibility,
             member_candidate_ids=member_ids,
             schema_version="1.1",
