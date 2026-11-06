@@ -170,6 +170,17 @@ class SwitchWireClient(SwitchAdapterInterface):
         except httpx.RequestError as exc:
             raise SwitchConnectionError(f"Connection error during agent registration: {exc!s}")
 
+    async def verify_auth(self) -> dict[str, Any]:
+        """
+        Perform an authenticated verification probe on the Switch bridge to prove that
+        the configured credentials are accepted.
+        """
+        if not self.agent_id:
+            raise SwitchAuthError("Authentication check failed: agent_id is not configured.")
+        if not self.agent_api_key:
+            raise SwitchAuthError("Authentication check failed: agent_api_key is not configured.")
+        return await self.update_addressing()
+
     async def update_addressing(self, addressing: str = "owner_and_owner_agents") -> dict[str, Any]:
         """
         Update addressing permission so participants can instruct the agent.
@@ -182,14 +193,19 @@ class SwitchWireClient(SwitchAdapterInterface):
             "agent_id": self.agent_id,
             "addressing": addressing,
         }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(url, json=payload, headers=self._get_auth_headers())
-            if resp.status_code == 200:
-                return resp.json()
-            raise SwitchIntegrationError(
-                f"Failed to update addressing ({resp.status_code}): {resp.text}",
-                status_code=resp.status_code,
-            )
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(url, json=payload, headers=self._get_auth_headers())
+                if resp.status_code == 200:
+                    return resp.json()
+                if resp.status_code in (401, 403):
+                    raise SwitchAuthError(f"Switch Bridge rejected agent credentials (HTTP {resp.status_code}): {resp.text}")
+                raise SwitchIntegrationError(
+                    f"Failed to update addressing ({resp.status_code}): {resp.text}",
+                    status_code=resp.status_code,
+                )
+        except httpx.RequestError as exc:
+            raise SwitchConnectionError(f"Network error during authentication verification: {exc!s}")
 
     async def post_message(self, room_id: str, content: str) -> dict[str, Any]:
         """

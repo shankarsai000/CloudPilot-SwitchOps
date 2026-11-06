@@ -30,3 +30,4 @@ All dashboard views adhere to the **Command Center Design System**:
 - **Accents:** Formal mathematical proofs highlighted in Cyan (`#06b6d4`), verified security status in Emerald (`#10b981`), critical findings in Amber/Crimson (`#f59e0b` / `#ef4444`).
 - **Typography:** Inter for high legibility data tables, Outfit for clear hierarchy headers, and ui-monospace for cryptographic SHA-256 hashes and HCL diffs.
 - **Zero Mock Buttons:** Every button on every screen triggers live backend REST API calls.
+

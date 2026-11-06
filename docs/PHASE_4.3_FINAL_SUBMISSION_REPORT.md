@@ -1,11 +1,11 @@
-# CloudPilot SwitchOps — Phase 4.3 Final Hackathon Submission Report
+# CloudPilot SwitchOps — Phase 4.3.1 Final Hackathon Submission Report
 
 **Project:** CloudPilot SwitchOps  
 **Repository:** https://github.com/shankarsai000/CloudPilot-SwitchOps  
 **Track:** Flip the Switch — Track 01: Best Business Workflow  
-**Baseline Commit:** `152a7a2` (`v4.2.0-live-switch-workflow`)  
-**Release Tag:** `v4.3.0-submission-ready`  
-**Test Suite:** **243 passed in 39.52s (100% pass rate, 0 regressions)**  
+**Baseline Commit:** `474c6a9` (`v4.3.0-submission-ready`)  
+**Release Tag:** `v4.3.1-release-integrity`  
+**Test Suite:** **249 passed in 27.82s (100% pass rate, 0 regressions)**  
 **Readiness Verdict:** **`SUBMISSION_READY_WITH_DOCUMENTED_EXTERNAL_LIMITATION`**  
 **Date:** November 6, 2026  
 **Auditor / Release Lead:** Principal Infrastructure, Security & Verification Architect  
@@ -18,7 +18,7 @@ CloudPilot SwitchOps has achieved full hackathon submission readiness for the **
 
 The system adheres strictly to the non-negotiable safety invariant: **CloudPilot never mutates live cloud environments** (`terraform apply`, `pulumi up`, and direct cloud write APIs are strictly prohibited) and executes bounded configuration changes only in isolated throwaway sandbox workspaces following explicit, role-authorized human approval with cryptographic SHA-256 hash matching.
 
-All 14 major subsystems spanning Phases 1 through 4.3 are complete, verified, and backed by reproducible evidence. The automated test suite executes **243 tests with zero regressions**, and two standalone executable demonstrations (`demo_submission.py` and `demo_submission_negative.py`) validate the entire 18-step positive workflow and all 5 negative safety gates.
+All 14 major subsystems spanning Phases 1 through 4.3.1 are complete, verified, and backed by reproducible evidence. The automated test suite executes **249 tests with zero regressions**, and three standalone executable demonstrations (`demo_submission_offline.py`, `demo_submission_live.py`, and `demo_submission_negative.py`) validate the entire 18-step positive offline workflow, strict live connection handling, and all 5 negative safety gates.
 
 ---
 
@@ -131,18 +131,18 @@ Executed via `python scripts/demo_submission_negative.py` with exit code `0`:
 
 ## H. Test Suite Quality Gate
 
-- **Total Tests Executed:** 243
-- **Passed:** 243 (100%)
+- **Total Tests Executed:** 249
+- **Passed:** 249 (100%)
 - **Failed:** 0
-- **Execution Duration:** 39.52 seconds
+- **Execution Duration:** 27.82 seconds
 - **Regression Count:** 0 (Full preservation of all historical releases)
-- **Breakdown:** 188 Unit Tests, 37 Integration Tests, 18 Platform Foundation Tests.
+- **Breakdown:** 191 Unit Tests, 22 Integration Tests, 7 Contract Tests, 29 Platform Foundation Tests.
 
 ---
 
 ## I. Truthful Operational Disclosures
 
-1. **Switch Wire Integration:** Operating in verified `EMULATED_MODE` in the absence of external cloud bridge secrets. External bridge credentials can be supplied via environment variables without code modification.
+1. **Switch Wire Integration:** Operating in verified `EMULATED_MODE` in the absence of external cloud bridge secrets. External bridge credentials can be supplied via environment variables (`SWITCH_MODE`, `SWITCH_BRIDGE_URL`, `SWITCH_AGENT_API_KEY`, etc.) without code modification.
 2. **FinOps Catalog Pricing:** Calculations use static catalog tables from AWS, GCP, and Azure public pricing APIs. They represent engineering baseline estimates, not live cloud billing data.
 3. **Local Audit Persistence:** Audit records are stored in a local relational SQLite database with indexed correlation IDs.
 
@@ -153,14 +153,18 @@ Executed via `python scripts/demo_submission_negative.py` with exit code `0`:
 ```bash
 # 1. Run full test suite:
 pytest tests docker/tests/test_platform_foundation.py -q
+# Expected: 249 passed in < 30s
 
-# 2. Run golden path positive demonstration:
-python scripts/demo_submission.py
+# 2. Run golden path positive offline demonstration:
+python scripts/demo_submission_offline.py
 
-# 3. Run adversarial safety gates demonstration:
+# 3. Run strict live Switch demonstration (fails closed with code 2 if bridge unavailable):
+python scripts/demo_submission_live.py
+
+# 4. Run adversarial safety gates demonstration:
 python scripts/demo_submission_negative.py
 
-# 4. Start web application and view control room:
+# 5. Start web application and view control room:
 python -m app.main
 # Open: http://localhost:8000/dashboard
 ```
@@ -182,11 +186,13 @@ The platform is mathematically verified, fully tested, securely bounded, and dem
 - `docs/phase4.3-gap-audit.md`: Detailed subsystem audit table and remediations.
 - `docs/phase4.3-live-switch-verification.md`: Complete Switch wire protocol specification (WebSocket + REST).
 - `evidence/phase4.3/switch-live-verification.md`: Live network socket probe log and credential inspection.
-- `docs/phase4.3-quality-report.md`: Complete test breakdown and execution logs.
+- `docs/phase4.3-quality-report.md`: Complete test breakdown and execution logs (249 tests passed).
 - `docs/submission-architecture.md`: Comprehensive system architecture and Mermaid diagrams.
 - `docs/SUBMISSION_DEMO_GUIDE.md`: Step-by-step judge evaluation instructions.
 - `docs/DEMO_VIDEO_SCRIPT.md`: 3–4 minute video presentation script.
 - `docs/SUBMISSION_SCREENSHOTS.md`: Screenshot inventory and visual design specifications.
 - `docs/SUBMISSION_CLAIMS_AND_EVIDENCE.md`: Systematic claim-to-evidence verification matrix.
-- `scripts/demo_submission.py`: Executable 18-step positive workflow demonstration.
+- `scripts/demo_submission_offline.py`: Executable 18-step offline positive workflow demonstration.
+- `scripts/demo_submission_live.py`: Strict live Switch workflow demonstration.
 - `scripts/demo_submission_negative.py`: Executable 5-gate adversarial safety demonstration.
+

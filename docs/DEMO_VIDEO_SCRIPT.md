@@ -31,3 +31,4 @@
    - Demonstrate the Header, Cockpit KPI cards, Area A through G tabs, and interactive approval action.
 3. **Pacing:**
    - Keep mouse cursor steady. Hover over the Z3 verification status badge and the pre/post SHA-256 hashes to emphasize cryptographic rigor and formal verification.
+

@@ -183,3 +183,4 @@ stateDiagram-v2
 - **Heartbeat & Cursor:** Ping-pong heartbeat with monotonic sequence cursor tracking to prevent lost room messages.
 - **Outbound Notifications:** Structured JSON payload delivered to `{bridge_url}/rooms/{room_id}/messages`.
 - **Truthful Status Reporting:** Reports `EMULATED_MODE` when local daemon is absent; reports `LIVE_CONNECTED` only upon completed bi-directional remote handshake.
+

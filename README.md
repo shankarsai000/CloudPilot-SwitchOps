@@ -1,9 +1,9 @@
 # CloudPilot SwitchOps
 ### Autonomous Cloud Operations Control Room for Switch AI
 
-[![Release](https://img.shields.io/badge/Release-v4.3.0--submission--ready-blue.svg)](https://github.com/shankarsai000/CloudPilot-SwitchOps)
+[![Release](https://img.shields.io/badge/Release-v4.3.1--release--integrity-blue.svg)](https://github.com/shankarsai000/CloudPilot-SwitchOps)
 [![Track 01](https://img.shields.io/badge/Flip%20the%20Switch-Track%2001%3A%20Best%20Business%20Workflow-indigo.svg)](https://wemakedevs.org/hackathons/switch)
-[![Test Suite](https://img.shields.io/badge/Tests-243%20Passed%20(100%25)-brightgreen.svg)](tests/)
+[![Test Suite](https://img.shields.io/badge/Tests-249%20Passed%20(100%25)-brightgreen.svg)](tests/)
 [![Z3 Solver](https://img.shields.io/badge/Formal%20Verification-Z3%20SMT%20Satisfiability-purple.svg)](docs/submission-architecture.md)
 [![Safety Boundary](https://img.shields.io/badge/Safety%20Boundary-Zero%20Live%20Cloud%20Mutation-success.svg)](docs/submission-architecture.md)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
@@ -155,19 +155,32 @@ The engine distinguishes:
 
 ---
 
-## 6. Switch Collaboration Wire Protocol
+## 6. Switch Collaboration Wire Protocol & Environment Configuration
 
 CloudPilot integrates natively with the Switch collaboration platform using a dual-mode wire protocol:
 
 - **Inbound Event Stream (WebSocket):**  
   `GET {switch_bridge_ws_url}/agents/{agent_id}/connection/ws`  
   Streams in-room messages, operator review commands, and approval instructions in real time.
-- **Outbound Message Channel (HTTP REST):**  
-  `POST {switch_bridge_url}/rooms/{room_id}/messages`  
+- **Outbound Agent Message Channel (HTTP REST):**  
+  `POST {switch_bridge_url}/agents/{agent_id}/message` (or room broadcast: `POST {switch_bridge_url}/rooms/{room_id}/messages`)  
   Publishes formatted proposal reviews, specialist summaries, and verified execution outcomes.
-- **Truthful Fallback Engine:**  
-  When external Switch bridge infrastructure is absent, CloudPilot operates cleanly in `EMULATED_MODE` without faking network confirmations, truthfully reporting:
-  `SUBMISSION_READY_WITH_DOCUMENTED_EXTERNAL_LIMITATION`.
+- **Addressing & Metadata Management (HTTP REST):**  
+  `POST {switch_bridge_url}/agents/{agent_id}/ops/update_agent_detail`  
+  Registers agent capabilities, addressing patterns (`@cloudpilot-ops-agent`), and performs authenticated connection verification.
+- **Canonical Environment Configuration:**  
+  All deployment and integration configurations use unified environment variable names:
+  ```bash
+  SWITCH_MODE=live                          # 'emulated' (default) or 'live'
+  SWITCH_BRIDGE_URL=http://localhost:8080   # Switch Agent Bridge base URL
+  SWITCH_AGENT_API_KEY=switch_live_key_...  # Secret API key (placeholders strictly rejected)
+  SWITCH_ROOM_ID=cloudpilot-ops             # Collaboration room name
+  SWITCH_AGENT_ID=cloudpilot-ops-agent      # Registered agent ID
+  SWITCH_REGISTRATION_KEY=reg_key_...       # Optional bridge registration token
+  ```
+- **Truthful Telemetry & Fallback Engine:**  
+  When external Switch bridge infrastructure is absent or unconfigured, CloudPilot operates cleanly in `EMULATED_MODE` without faking network confirmations, truthfully reporting:
+  `SUBMISSION_READY_WITH_DOCUMENTED_EXTERNAL_LIMITATION`. Live status requires passing an authenticated communication exchange (`verify_auth()`), and placeholder credentials (e.g. `<your-agent-id>`, `dummy`, `test`) fail closed.
 
 ---
 
@@ -213,15 +226,19 @@ pip install -r requirements.txt
 ### 2. Run Automated Verification Suite
 ```bash
 pytest tests docker/tests/test_platform_foundation.py -q
-# Expected: 243 passed
+# Expected: 249 passed in < 30s
 ```
 
 ### 3. Launch Standalone Demonstrations
 ```bash
-# Positive 18-step golden path workflow:
-python scripts/demo_submission.py
+# 1. Deterministic 18-step offline emulated demonstration:
+python scripts/demo_submission_offline.py
+# (or: python scripts/demo_submission.py)
 
-# Negative 5-gate adversarial safety verification:
+# 2. Strict live Switch demonstration (fails closed with code 2 if bridge credentials unavailable):
+python scripts/demo_submission_live.py
+
+# 3. Negative 5-gate adversarial safety & role escalation verification:
 python scripts/demo_submission_negative.py
 ```
 

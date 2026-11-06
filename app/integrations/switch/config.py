@@ -15,6 +15,34 @@ from pydantic import BaseModel, Field, SecretStr
 from app.core.config import Settings, get_settings
 
 
+def is_placeholder_credential(value: Optional[str]) -> bool:
+    """Return True if the value is empty or an obvious placeholder template token."""
+    if not value:
+        return True
+    val = value.strip()
+    if not val:
+        return True
+    val_lower = val.lower()
+    if val_lower.startswith("<") and val_lower.endswith(">"):
+        return True
+    placeholder_patterns = (
+        "placeholder",
+        "your-",
+        "<your",
+        "dummy",
+        "fake",
+        "demo-key",
+        "swak_placeholder",
+        "switch_reg_placeholder",
+        "unverified",
+    )
+    if any(p in val_lower for p in placeholder_patterns):
+        return True
+    if val_lower in ("test", "xxx", "todo", "none", "null", "undefined", "changeme"):
+        return True
+    return False
+
+
 class SwitchConnectionConfig(BaseModel):
     """
     Strongly typed Switch connection configuration with bounded retry parameters.
@@ -85,7 +113,8 @@ class SwitchConnectionConfig(BaseModel):
                 mode_raw = "auto"
 
         endpoint = (
-            os.environ.get("SWITCH_ENDPOINT")
+            os.environ.get("SWITCH_BRIDGE_URL")
+            or os.environ.get("SWITCH_ENDPOINT")
             or os.environ.get("CLOUDPILOT_SWITCH_BRIDGE_URL")
             or app_settings.switch_bridge_url
             or "http://localhost:8080"
@@ -109,19 +138,26 @@ class SwitchConnectionConfig(BaseModel):
         )
 
         # Ignore placeholder template values
-        if agent_id in ("", "agent_placeholder_id", "<your-agent-id>"):
+        if is_placeholder_credential(agent_id):
             agent_id = None
 
-        raw_api_key = os.environ.get("SWITCH_API_KEY") or os.environ.get("CLOUDPILOT_SWITCH_AGENT_API_KEY")
+        raw_api_key = (
+            os.environ.get("SWITCH_AGENT_API_KEY")
+            or os.environ.get("SWITCH_API_KEY")
+            or os.environ.get("CLOUDPILOT_SWITCH_AGENT_API_KEY")
+        )
         if not raw_api_key and app_settings.switch_agent_api_key:
             raw_api_key = app_settings.switch_agent_api_key.get_secret_value()
-        if raw_api_key in ("", "swak_placeholder_agent_api_key", "<your-agent-api-key>"):
+        if is_placeholder_credential(raw_api_key):
             raw_api_key = None
 
-        raw_reg_key = os.environ.get("SWITCH_REGISTRATION_KEY") or os.environ.get("CLOUDPILOT_SWITCH_REGISTRATION_KEY")
+        raw_reg_key = (
+            os.environ.get("SWITCH_REGISTRATION_KEY")
+            or os.environ.get("CLOUDPILOT_SWITCH_REGISTRATION_KEY")
+        )
         if not raw_reg_key and app_settings.switch_registration_key:
             raw_reg_key = app_settings.switch_registration_key.get_secret_value()
-        if raw_reg_key in ("", "switch_reg_placeholder_token", "<your-registration-key>"):
+        if is_placeholder_credential(raw_reg_key):
             raw_reg_key = None
 
         timeout_val = float(os.environ.get("SWITCH_CONNECTION_TIMEOUT", "15.0"))
@@ -144,8 +180,16 @@ class SwitchConnectionConfig(BaseModel):
 
     def has_live_credentials(self) -> bool:
         """Return True only if non-placeholder live credentials are configured."""
-        has_agent_creds = bool(self.agent_id and self.api_key and self.api_key.get_secret_value())
-        has_reg_creds = bool(self.registration_key and self.registration_key.get_secret_value())
+        has_agent_creds = bool(
+            self.agent_id
+            and not is_placeholder_credential(self.agent_id)
+            and self.api_key
+            and not is_placeholder_credential(self.api_key.get_secret_value())
+        )
+        has_reg_creds = bool(
+            self.registration_key
+            and not is_placeholder_credential(self.registration_key.get_secret_value())
+        )
         return bool(self.endpoint and (has_agent_creds or has_reg_creds))
 
     def safe_summary(self) -> dict[str, Any]:

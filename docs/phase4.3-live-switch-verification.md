@@ -45,39 +45,30 @@ The integration architecture implements a dual-mode communication model:
 +-------------------------------------------------------------------------+
 ```
 
-### 2.1 Outbound REST API Contract
+### 2.1 Outbound REST API Contract (Agent Message Publication)
 
-- **Endpoint:** `POST {switch_bridge_url}/rooms/{room_id}/messages`
+- **Endpoint:** `POST {switch_bridge_url}/agents/{agent_id}/message`
 - **Headers:**
   - `Content-Type: application/json`
   - `Authorization: Bearer {switch_agent_api_key}`
-  - `X-Switch-Agent-Id: {agent_id}`
-  - `X-Correlation-ID: {correlation_id}`
 - **Payload Schema:**
   ```json
   {
-    "sender_id": "cloudpilot-agent",
-    "sender_role": "agent",
-    "content": "Proposal prop-9a4f2 ready for review. Estimated savings: $148.50/mo. SHA-256: 4f8a...",
-    "metadata": {
-      "type": "PROPOSAL_PENDING_APPROVAL",
-      "proposal_id": "prop-9a4f2",
-      "proposal_hash": "4f8a7c2b3e5d...",
-      "task_id": "task-01",
-      "estimated_monthly_savings_usd": 148.50,
-      "risk_level": "LOW",
-      "review_url": "http://localhost:8000/dashboard#approval-center"
-    }
+    "room_id": "cloudpilot-ops",
+    "content": "### 📝 [CloudPilot SwitchOps] Formal Infrastructure Change Proposal Generated — Human Review Required\n- **Proposal ID**: `prop-9a4f2`\n- **Decision ID**: `dec-01`\n- **Pre-Mutation SHA-256**: `4f8a7c2b3e5d...`\n- **Estimated Monthly Savings**: `$54.90/mo USD`\n..."
   }
   ```
 
-### 2.2 Inbound WebSocket Contract
+### 2.2 Inbound WebSocket Contract (Event Stream)
 
 - **Endpoint:** `GET {switch_bridge_ws_url}/agents/{agent_id}/connection/ws`
 - **Handshake Protocol:**
   - Standard WebSocket Upgrade (`HTTP/1.1 101 Switching Protocols`)
   - Subprotocol: `switch.agent.v1`
-  - Handshake Query: `?token={switch_agent_api_key}&room={room_id}`
+  - Authentication: `Authorization: Bearer {switch_agent_api_key}` (or query `?token={switch_agent_api_key}`)
+- **Ping / Pong Framing:**
+  - Server sends ping: `{"type": "ping", "cursor": cursor}`
+  - Agent responds: `{"type": "pong", "cursor": cursor}` within 2 seconds.
 - **Inbound Event Schema (e.g. In-Room Approval):**
   ```json
   {
@@ -142,3 +133,4 @@ export SWITCH_AGENT_API_KEY=sw_live_sec_prod_...
 export SWITCH_ROOM_ID=production-cloudops
 python -m app.main
 ```
+

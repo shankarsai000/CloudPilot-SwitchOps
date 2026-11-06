@@ -176,6 +176,10 @@ class SwitchConnectionManager:
                         raise SwitchUnverifiedLiveError(blocker, blocker=blocker)
                     return self.health
 
+                # Authenticated communication exchange required for LIVE_CONNECTED status
+                if hasattr(self.adapter, "verify_auth"):
+                    await self.adapter.verify_auth()
+
                 self.health.mark_live_connected(
                     latency_ms=latency_ms,
                     session_id=self.session_id,
