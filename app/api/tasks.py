@@ -90,6 +90,7 @@ async def simulate_switch_message(
     including room acknowledgment and result posting.
     """
     frame = {
+        "type": "event",
         "event": "message",
         "rooms": [req.room_id],
         "payload": {

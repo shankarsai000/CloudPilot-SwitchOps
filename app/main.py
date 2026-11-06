@@ -21,11 +21,8 @@ from fastapi.responses import JSONResponse
 
 from app.api.health import (
     get_repository as health_get_repo,
-)
-from app.api.health import (
     get_switch_adapter as health_get_adapter,
-)
-from app.api.health import (
+    get_switch_connection_manager as health_get_conn_manager,
     router as health_router,
 )
 from app.api.tasks import (
@@ -59,7 +56,10 @@ from app.core.logging import (
     get_logger,
     set_correlation_id,
 )
+from app.integrations.switch.adapter import create_switch_integration
 from app.integrations.switch.client import SwitchAdapterInterface, SwitchWireClient
+from app.integrations.switch.connection_manager import SwitchConnectionManager
+from app.integrations.switch.event_handler import SwitchEventHandler
 from app.integrations.switch.mock_bridge import EmulatedSwitchBridge
 from app.persistence.repository import (
     SQLiteTaskRepository,
@@ -72,6 +72,8 @@ logger = get_logger("cloudpilot.main")
 # Global application dependencies
 _repository: TaskRepositoryInterface | None = None
 _switch_adapter: SwitchAdapterInterface | None = None
+_switch_connection_manager: SwitchConnectionManager | None = None
+_switch_event_handler: SwitchEventHandler | None = None
 _task_service: TaskService | None = None
 _switch_listener_task: asyncio.Task | None = None
 
@@ -86,6 +88,10 @@ def get_switch_adapter() -> SwitchAdapterInterface:
     return _switch_adapter
 
 
+def get_switch_connection_manager() -> SwitchConnectionManager | None:
+    return _switch_connection_manager
+
+
 def get_task_service() -> TaskService:
     assert _task_service is not None, "Task service has not been initialized."
     return _task_service
@@ -94,7 +100,7 @@ def get_task_service() -> TaskService:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifecycle: setup database, initialize adapters, start listeners."""
-    global _repository, _switch_adapter, _task_service, _switch_listener_task
+    global _repository, _switch_adapter, _switch_connection_manager, _switch_event_handler, _task_service, _switch_listener_task
     settings = get_settings()
 
     logger.info("Initializing CloudPilot SwitchOps v%s...", settings.app_version)
@@ -105,26 +111,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         db_path = db_path.replace("sqlite:///", "")
     _repository = SQLiteTaskRepository(db_path=db_path)
 
-    # 2. Initialize Switch adapter
-    # If explicitly running in testing or mock mode, use EmulatedSwitchBridge
-    if settings.is_testing or settings.environment == "development" and not settings.switch_agent_api_key:
-        logger.info("Using EmulatedSwitchBridge for local development/testing.")
-        mock_bridge = EmulatedSwitchBridge()
-        _switch_adapter = mock_bridge
-    else:
-        logger.info("Connecting to Switch Agent Bridge at %s", settings.switch_bridge_url)
-        _switch_adapter = SwitchWireClient(
-            bridge_url=settings.switch_bridge_url or "http://localhost:8080",
-            agent_id=settings.switch_agent_id,
-            agent_api_key=settings.switch_agent_api_key.get_secret_value() if settings.switch_agent_api_key else None,
-        )
+    # 2. Initialize Switch adapter, connection manager, and event handler
+    _switch_adapter, _switch_connection_manager = create_switch_integration(settings)
+    _switch_event_handler = SwitchEventHandler()
 
     # 3. Initialize Task Service
-    _task_service = TaskService(repository=_repository, switch_adapter=_switch_adapter)
+    _task_service = TaskService(
+        repository=_repository,
+        switch_adapter=_switch_adapter,
+        connection_manager=_switch_connection_manager,
+        event_handler=_switch_event_handler,
+    )
 
     # 4. Bind dependency overrides to API routers
     app.dependency_overrides[health_get_repo] = get_repository
     app.dependency_overrides[health_get_adapter] = get_switch_adapter
+    app.dependency_overrides[health_get_conn_manager] = get_switch_connection_manager
     app.dependency_overrides[tasks_get_service] = get_task_service
     app.dependency_overrides[assessments_get_repo] = get_repository
     app.dependency_overrides[assessments_get_service] = get_task_service

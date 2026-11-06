@@ -44,6 +44,13 @@ from app.domain.models import (
 )
 from app.domain.objectives import PreferenceProfile
 from app.integrations.switch.client import SwitchAdapterInterface
+from app.integrations.switch.connection_manager import SwitchConnectionManager
+from app.integrations.switch.event_handler import SwitchEventHandler
+from app.integrations.switch.message_mapper import (
+    SwitchCollaborationEvent,
+    SwitchMessageMapper,
+    WorkflowEventType,
+)
 from app.persistence.repository import TaskRepositoryInterface
 from app.services.approval.approval_service import ApprovalSecurityError, ApprovalService
 from app.services.decision.decision_orchestrator import DecisionOrchestrator
@@ -68,18 +75,28 @@ class TaskService:
         discovery_engine: Optional[InfrastructureDiscoveryEngine] = None,
         finops_specialist: Optional[FinOpsSpecialist] = None,
         secops_specialist: Optional[SecOpsSpecialist] = None,
+        connection_manager: Optional[SwitchConnectionManager] = None,
+        event_handler: Optional[SwitchEventHandler] = None,
     ) -> None:
         self.repository = repository
         self.switch_adapter = switch_adapter
         self.discovery_engine = discovery_engine or InfrastructureDiscoveryEngine()
         self.finops_specialist = finops_specialist or FinOpsSpecialist()
         self.secops_specialist = secops_specialist or SecOpsSpecialist()
+        self.connection_manager = connection_manager or SwitchConnectionManager(adapter=switch_adapter)
+        self.event_handler = event_handler or SwitchEventHandler()
 
     async def handle_switch_event(self, frame: dict[str, Any]) -> Task | None:
         """
         Handle an incoming event frame from the Switch Agent Bridge.
         Filters for addressed room messages, executes task lifecycle, and posts room replies.
         """
+        try:
+            self.event_handler.validate_frame(frame)
+        except Exception as frame_err:
+            logger.debug("Frame validation failed: %s", frame_err)
+            return None
+
         event_kind = frame.get("event")
         payload = frame.get("payload", {})
 
@@ -90,6 +107,11 @@ class TaskService:
         # Verify addressed flag
         if not payload.get("addressed", False):
             logger.debug("Ignoring unaddressed room message")
+            return None
+
+        # Inbound deduplication
+        if self.connection_manager.is_duplicate_inbound_event(frame):
+            logger.info("Ignoring duplicate inbound Switch message: %s", payload.get("message_id"))
             return None
 
         body = payload.get("body", "").strip()
@@ -259,7 +281,12 @@ class TaskService:
                 f"- **Correlation ID**: `{cid}`\n"
                 f"Proceeding to evaluate operational boundary..."
             )
-            await self._safe_post_switch_message(room_id, ack_message, task=task)
+            await self._safe_post_switch_message(
+                room_id,
+                ack_message,
+                task=task,
+                event_type=WorkflowEventType.TASK_ACKNOWLEDGED,
+            )
 
             # 3. Transition to IN_PROGRESS
             task.transition_to(TaskStatus.IN_PROGRESS)
@@ -342,7 +369,12 @@ class TaskService:
                     f"{execution_summary}\n\n"
                     f"*Audit trail persisted with {len(self.repository.get_events_for_task(task.task_id))} events.*"
                 )
-                await self._safe_post_switch_message(room_id, report_message, task=task)
+                await self._safe_post_switch_message(
+                    room_id,
+                    report_message,
+                    task=task,
+                    event_type=WorkflowEventType.WORKFLOW_COMPLETED,
+                )
 
             # 5. Transition to COMPLETED
             task.transition_to(TaskStatus.COMPLETED)
@@ -546,21 +578,19 @@ class TaskService:
                 task.metadata["proposal_id"] = proposal.proposal_id
                 task.metadata["proposal_hash"] = proposal.proposal_hash
 
-                proposal_announcement = (
-                    f"📝 **Formal Infrastructure Change Proposal Generated**\n"
-                    f"- **Proposal ID**: `{proposal.proposal_id}`\n"
-                    f"- **Decision ID**: `{decision_run.decision_id}`\n"
-                    f"- **Candidate**: `{decision_run.recommended_candidate.title}`\n"
-                    f"- **Proposal SHA-256 Hash**: `{proposal.proposal_hash}`\n"
-                    f"- **Status**: `PROPOSED` (Awaiting Human-in-the-Loop Authorization)\n\n"
-                    f"**To Authorize and Execute via Switch:**\n"
-                    f"`@cloudpilot-ops-agent approve proposal {proposal.proposal_id}`\n\n"
-                    f"**To Reject:**\n"
-                    f"`@cloudpilot-ops-agent reject proposal {proposal.proposal_id} reason: <reason>`\n\n"
-                    f"> *Strict Safety Policy*: Live cloud mutations are strictly prohibited. "
-                    f"Approved modifications run inside an isolated workspace sandbox."
+                proposal_announcement = SwitchMessageMapper.format_proposal_for_switch(
+                    proposal=proposal,
+                    decision_run=decision_run,
+                    decision_report=report,
                 )
-                await self._safe_post_switch_message(room_id, proposal_announcement, task=task)
+                await self._safe_post_switch_message(
+                    room_id,
+                    proposal_announcement,
+                    task=task,
+                    event_type=WorkflowEventType.PROPOSAL_PUBLISHED,
+                    proposal_id=proposal.proposal_id,
+                    correlation_id=correlation_id,
+                )
             except Exception as prop_err:
                 logger.warning(
                     "Could not auto-generate proposal for decision %s: %s",
@@ -573,32 +603,11 @@ class TaskService:
     def _extract_principal(
         self, sender: str, sender_name: str, metadata: dict[str, Any] | None
     ) -> ApprovalPrincipal:
-        """Extract and validate principal identity and role from Switch message context."""
-        meta = metadata or {}
-        role_str = meta.get("user_role") or meta.get("approver_role")
-        if role_str:
-            try:
-                role = ApproverRole(role_str)
-            except ValueError:
-                role = ApproverRole.OPERATOR
-        else:
-            sender_lower = (sender + " " + sender_name).lower()
-            if any(
-                keyword in sender_lower
-                for keyword in ["lead", "architect", "platform", "sre", "admin", "finops", "security"]
-            ):
-                role = ApproverRole.PLATFORM_LEAD
-            else:
-                role = ApproverRole.OPERATOR
-
-        authenticated = meta.get(
-            "authenticated", sender != "anonymous" and not sender.startswith("unauth")
-        )
-        return ApprovalPrincipal(
-            principal_id=sender,
-            display_name=sender_name,
-            role=role,
-            authenticated=authenticated,
+        """Extract and validate principal identity and role from Switch message context using authoritative server directory."""
+        return self.event_handler.resolve_authenticated_principal(
+            sender=sender,
+            sender_name=sender_name,
+            metadata=metadata,
         )
 
     async def _handle_switch_approval(
@@ -847,14 +856,38 @@ class TaskService:
         room_id: str,
         content: str,
         task: Optional[Task] = None,
+        event_type: Optional[WorkflowEventType] = None,
+        proposal_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+        correlation_id: Optional[str] = None,
     ) -> None:
         """
-        Post a message to the Switch room, truthfully surfacing delivery errors in task metadata.
+        Post a message to the Switch room via ConnectionManager, truthfully surfacing
+        delivery errors in task metadata and recording collaboration events.
         """
+        cid = correlation_id or (task.correlation_id if task else f"corr-{uuid.uuid4().hex[:10]}")
+        tid = task.task_id if task else f"task-sys-{uuid.uuid4().hex[:6]}"
+        ev_type = event_type or WorkflowEventType.WORKFLOW_COMPLETED
+
+        collab_event = SwitchCollaborationEvent(
+            event_type=ev_type,
+            task_id=tid,
+            proposal_id=proposal_id,
+            execution_id=execution_id,
+            correlation_id=cid,
+            switch_room_id=room_id,
+            summary=content[:120],
+        )
+
         try:
-            await self.switch_adapter.post_message(room_id=room_id, content=content)
+            published = await self.connection_manager.publish_workflow_event(
+                event=collab_event,
+                content=content,
+            )
             if task:
-                task.metadata["switch_delivery_status"] = "DELIVERED"
+                task.metadata["switch_delivery_status"] = published.delivery_status
+                if published.switch_message_id:
+                    task.metadata["switch_last_message_id"] = published.switch_message_id
         except Exception as err:
             logger.warning(
                 "Unable to post message to Switch room '%s' (bridge may be offline): %s",

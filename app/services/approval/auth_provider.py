@@ -33,9 +33,11 @@ SERVER_PRINCIPAL_DIRECTORY: Dict[str, ApproverRole] = {
     "dev-user": ApproverRole.DEVELOPER,
     "guest-viewer": ApproverRole.VIEWER,
     "@platform-lead:switch": ApproverRole.PLATFORM_LEAD,
+    "@lead:switch": ApproverRole.PLATFORM_LEAD,
     "@secops-lead:switch": ApproverRole.SECURITY_LEAD,
     "@finops-lead:switch": ApproverRole.FINOPS_LEAD,
     "@operator:switch": ApproverRole.OPERATOR,
+    "@operator-junior:switch": ApproverRole.OPERATOR,
     "system-coordinator": ApproverRole.PLATFORM_LEAD,
 }
 

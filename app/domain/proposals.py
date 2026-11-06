@@ -20,17 +20,79 @@ from app.domain.candidates import Candidate, CandidateType, ProposedChange
 
 
 class ProposalStatus(str, Enum):
-    """Lifecycle status of a change proposal."""
+    """Lifecycle status of a change proposal (Phase 4 & 4.2)."""
     DRAFT = "DRAFT"
     PENDING_APPROVAL = "PENDING_APPROVAL"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"
+    CONSUMED = "CONSUMED"
+    EXECUTION_PENDING = "EXECUTION_PENDING"
     EXECUTING = "EXECUTING"
     EXECUTED = "EXECUTED"
+    COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+    RECOVERY_REQUIRED = "RECOVERY_REQUIRED"
     ROLLED_BACK = "ROLLED_BACK"
+    RECOVERED = "RECOVERED"
     CANCELLED = "CANCELLED"
+
+
+VALID_PROPOSAL_TRANSITIONS: Dict[ProposalStatus, set[ProposalStatus]] = {
+    ProposalStatus.DRAFT: {ProposalStatus.PENDING_APPROVAL, ProposalStatus.CANCELLED},
+    ProposalStatus.PENDING_APPROVAL: {
+        ProposalStatus.APPROVED,
+        ProposalStatus.REJECTED,
+        ProposalStatus.EXPIRED,
+        ProposalStatus.CANCELLED,
+    },
+    ProposalStatus.APPROVED: {
+        ProposalStatus.CONSUMED,
+        ProposalStatus.EXECUTION_PENDING,
+        ProposalStatus.EXECUTING,
+        ProposalStatus.EXECUTED,
+        ProposalStatus.COMPLETED,
+        ProposalStatus.FAILED,
+        ProposalStatus.ROLLED_BACK,
+        ProposalStatus.EXPIRED,
+    },
+    ProposalStatus.CONSUMED: {
+        ProposalStatus.EXECUTION_PENDING,
+        ProposalStatus.EXECUTING,
+        ProposalStatus.EXECUTED,
+        ProposalStatus.COMPLETED,
+        ProposalStatus.FAILED,
+        ProposalStatus.RECOVERY_REQUIRED,
+        ProposalStatus.ROLLED_BACK,
+        ProposalStatus.RECOVERED,
+    },
+    ProposalStatus.EXECUTION_PENDING: {
+        ProposalStatus.EXECUTING,
+        ProposalStatus.FAILED,
+    },
+    ProposalStatus.EXECUTING: {
+        ProposalStatus.EXECUTED,
+        ProposalStatus.COMPLETED,
+        ProposalStatus.FAILED,
+        ProposalStatus.RECOVERY_REQUIRED,
+        ProposalStatus.ROLLED_BACK,
+        ProposalStatus.RECOVERED,
+    },
+    ProposalStatus.RECOVERY_REQUIRED: {
+        ProposalStatus.ROLLED_BACK,
+        ProposalStatus.RECOVERED,
+        ProposalStatus.FAILED,
+    },
+    # Terminal states: no outbound transitions permitted
+    ProposalStatus.REJECTED: set(),
+    ProposalStatus.EXPIRED: set(),
+    ProposalStatus.EXECUTED: {ProposalStatus.COMPLETED},
+    ProposalStatus.COMPLETED: set(),
+    ProposalStatus.FAILED: {ProposalStatus.ROLLED_BACK, ProposalStatus.RECOVERED},
+    ProposalStatus.ROLLED_BACK: {ProposalStatus.RECOVERED},
+    ProposalStatus.RECOVERED: set(),
+    ProposalStatus.CANCELLED: set(),
+}
 
 
 class Proposal(BaseModel):
@@ -71,6 +133,7 @@ class Proposal(BaseModel):
     security_impact: str = "NEUTRAL"
     reliability_impact: str = "NEUTRAL"
     operational_complexity: str = "LOW"
+    rollback_plan: str = "Pre-execution atomic workspace snapshot rollback"
     status: ProposalStatus = Field(default=ProposalStatus.PENDING_APPROVAL)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: datetime
@@ -110,6 +173,19 @@ class Proposal(BaseModel):
         if current_time.tzinfo is None:
             current_time = current_time.replace(tzinfo=timezone.utc)
         return current_time > self.expires_at
+
+    def can_transition_to(self, target_status: ProposalStatus) -> bool:
+        """Returns True if transition from current status to target_status is valid."""
+        allowed = VALID_PROPOSAL_TRANSITIONS.get(self.status, set())
+        return target_status in allowed
+
+    def transition_to(self, target_status: ProposalStatus) -> None:
+        """Transitions proposal status or raises ValueError if transition is invalid."""
+        if not self.can_transition_to(target_status):
+            raise ValueError(
+                f"Invalid proposal state transition from '{self.status.value}' to '{target_status.value}'"
+            )
+        self.status = target_status
 
     def to_canonical_dict(self) -> Dict[str, Any]:
         """Returns canonical dictionary representation for auditing and hashing."""

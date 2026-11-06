@@ -82,6 +82,8 @@ class ProposedChange(BaseModel):
     @classmethod
     def populate_aliases(cls, data: Any) -> Any:
         if isinstance(data, dict):
+            if "file_path" in data and not data.get("source_file"):
+                data["source_file"] = data["file_path"]
             if "attribute" in data and not data.get("attribute_path"):
                 data["attribute_path"] = data["attribute"]
             if "old_value" in data and data.get("current_value") is None:

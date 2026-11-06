@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  # Web application gateway with oversized container memory limit (FIN-002)
+  # Proposed bounded change: rightsized limits
+  web_gateway:
+    image: nginx:alpine
+    container_name: demo-web-gateway
+    ports:
+      - "8080:80"
+    restart: "always"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4096M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Redis cache service: secure localhost binding, standard resource reservation
+  redis_cache:
+    image: redis:7.0-alpine
+    container_name: demo-redis-cache
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: "unless-stopped"

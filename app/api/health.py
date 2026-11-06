@@ -7,13 +7,14 @@ Provides standard operational endpoints:
 """
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.core.config import Settings, get_settings
 from app.integrations.switch.client import SwitchAdapterInterface
+from app.integrations.switch.connection_manager import SwitchConnectionManager
 from app.persistence.repository import TaskRepositoryInterface
 
 router = APIRouter(tags=["Health & Diagnostics"])
@@ -36,6 +37,15 @@ class ReadinessResponse(BaseModel):
     timestamp: str
 
 
+class SwitchStatusResponse(BaseModel):
+    configured: bool
+    state: str
+    healthy: bool
+    truthful_report: dict[str, Any]
+    capabilities: dict[str, Any]
+    timestamp: str
+
+
 # Module-level dependency providers to be overridden or bound in main.py
 def get_repository() -> TaskRepositoryInterface:
     raise NotImplementedError
@@ -43,6 +53,10 @@ def get_repository() -> TaskRepositoryInterface:
 
 def get_switch_adapter() -> SwitchAdapterInterface:
     raise NotImplementedError
+
+
+def get_switch_connection_manager() -> Optional[SwitchConnectionManager]:
+    return None
 
 
 @router.get(
@@ -72,6 +86,7 @@ async def readiness_probe(
     settings: Settings = Depends(get_settings),
     repo: TaskRepositoryInterface = Depends(get_repository),
     adapter: SwitchAdapterInterface = Depends(get_switch_adapter),
+    manager: Optional[SwitchConnectionManager] = Depends(get_switch_connection_manager),
 ) -> ReadinessResponse:
     # 1. Validate Database Persistence
     db_status = "healthy"
@@ -93,6 +108,12 @@ async def readiness_probe(
         switch_report["status"] = "degraded"
         switch_report["error"] = str(exc)
 
+    if manager is not None:
+        health_obj = manager.get_health()
+        switch_report["connection_health"] = health_obj.to_status_dict()
+        switch_report["capabilities"] = health_obj.protocol_capabilities.model_dump()
+        switch_report["truthful_state"] = health_obj.state.value
+
     # Calculate overall readiness
     is_ready = db_status == "healthy" and switch_report["status"] == "healthy"
 
@@ -111,3 +132,43 @@ async def readiness_probe(
         )
 
     return resp
+
+
+@router.get(
+    "/health/switch",
+    response_model=SwitchStatusResponse,
+    summary="Switch Status and Capabilities",
+    description="Exposes the truthful connectivity state and capability matrix for Switch integration.",
+)
+@router.get(
+    "/api/v1/switch/status",
+    response_model=SwitchStatusResponse,
+    summary="Switch Diagnostic Status (API alias)",
+    include_in_schema=False,
+)
+async def switch_status(
+    settings: Settings = Depends(get_settings),
+    adapter: SwitchAdapterInterface = Depends(get_switch_adapter),
+    manager: Optional[SwitchConnectionManager] = Depends(get_switch_connection_manager),
+) -> SwitchStatusResponse:
+    configured = settings.is_switch_configured()
+    if manager is not None:
+        health_obj = manager.get_health()
+        return SwitchStatusResponse(
+            configured=configured,
+            state=health_obj.state.value,
+            healthy=health_obj.is_operational(),
+            truthful_report=health_obj.to_status_dict(),
+            capabilities=health_obj.protocol_capabilities.model_dump(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
+
+    # Fallback if connection manager is not bound
+    return SwitchStatusResponse(
+        configured=configured,
+        state="UNKNOWN",
+        healthy=False,
+        truthful_report={"error": "Connection manager not initialized"},
+        capabilities={},
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
