@@ -226,3 +226,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 app = create_app()
+
+if __name__ == "__main__":
+    import socket
+    import uvicorn
+
+    settings = get_settings()
+    port = settings.port
+
+    def is_port_in_use(p: int) -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((settings.host, p))
+                return False
+            except OSError:
+                return True
+
+    if is_port_in_use(port):
+        for candidate_port in range(port + 1, port + 20):
+            if not is_port_in_use(candidate_port):
+                logger.warning(
+                    "Port %d is already in use by another process. Falling back to port %d.",
+                    port,
+                    candidate_port,
+                )
+                port = candidate_port
+                break
+
+    print(f"\n==================================================================")
+    print(f"  CLOUDPILOT SWITCHOPS CONTROL ROOM ACTIVE")
+    print(f"  Dashboard: http://localhost:{port}/dashboard")
+    print(f"  API Docs:  http://localhost:{port}/docs")
+    print(f"==================================================================\n")
+
+    uvicorn.run("app.main:app", host=settings.host, port=port, reload=settings.debug)
+
+
