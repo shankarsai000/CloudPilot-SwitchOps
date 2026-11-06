@@ -1,296 +1,290 @@
 # CloudPilot SwitchOps
-### Switch-Native Autonomous Cloud Engineering Control Room
+### Autonomous Cloud Operations Control Room for Switch AI
 
+[![Release](https://img.shields.io/badge/Release-v4.3.0--submission--ready-blue.svg)](https://github.com/shankarsai000/CloudPilot-SwitchOps)
+[![Track 01](https://img.shields.io/badge/Flip%20the%20Switch-Track%2001%3A%20Best%20Business%20Workflow-indigo.svg)](https://wemakedevs.org/hackathons/switch)
+[![Test Suite](https://img.shields.io/badge/Tests-243%20Passed%20(100%25)-brightgreen.svg)](tests/)
+[![Z3 Solver](https://img.shields.io/badge/Formal%20Verification-Z3%20SMT%20Satisfiability-purple.svg)](docs/submission-architecture.md)
+[![Safety Boundary](https://img.shields.io/badge/Safety%20Boundary-Zero%20Live%20Cloud%20Mutation-success.svg)](docs/submission-architecture.md)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Switch AI Native](https://img.shields.io/badge/Switch-Native%20Integration-6366f1.svg)](https://switchagents.ai/)
-[![Phase 4 Release](https://img.shields.io/badge/Release-v4.0.0--phase4--execution-blue.svg)](https://github.com/shankarsai000/CloudPilot-SwitchOps)
-[![Tests Passing](https://img.shields.io/badge/All%20Tests-173%20Passed-brightgreen.svg)](tests/)
-[![Z3 Solver Verified](https://img.shields.io/badge/Formal%20Verification-Z3%20SMT%20Verified-purple.svg)](docs/constraint-engine.md)
-[![Human-in-the-Loop](https://img.shields.io/badge/Governance-HMAC--SHA256%20Approval%20Gated-success.svg)](docs/approval-system.md)
-[![Bounded Execution](https://img.shields.io/badge/Execution-Sandbox%20Isolated-orange.svg)](docs/bounded-execution.md)
-[![SHA-256 Provenance](https://img.shields.io/badge/Evidence%20Provenance-SHA--256%20Verified-teal.svg)](docs/recommendation-model.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey.svg)](LICENSE)
 
 > Built for the **Flip the Switch Hackathon — Track 01: Best Business Workflow**  
 > Hackathon details: [wemakedevs.org/hackathons/switch](https://www.wemakedevs.org/hackathons/switch)  
-> Switch Documentation: [docs.switchagents.ai](https://docs.switchagents.ai/)
+> Switch Documentation: [docs.switchagents.ai](https://docs.switchagents.ai/)  
+> Repository: [github.com/shankarsai000/CloudPilot-SwitchOps](https://github.com/shankarsai000/CloudPilot-SwitchOps)
 
 ---
 
-## 1. What CloudPilot SwitchOps Does
+## 1. Executive Summary & Value Proposition
 
-**CloudPilot SwitchOps** transforms disjointed cloud operations into a shared, collaborative control room inside **Switch AI**. 
+Modern cloud operations are broken across siloed tools: FinOps discovers cost waste in static spreadsheets, SecOps raises thousands of noisy vulnerability alerts, and SREs fear black-box autonomous agents that modify infrastructure without human oversight.
 
-Instead of isolating human operators inside complex dashboards and autonomous agents inside CLI silos, CloudPilot SwitchOps unites human engineers and specialized AI agents in a shared Switch team-chat room (`cloudpilot-ops`). Together, they:
-1. **Investigate cloud infrastructure** across cost, security, and reliability dimensions.
-2. **Evaluate trade-offs** using verifiable evidence findings and counterfactual simulations.
-3. **Govern modifications** through explicit human-in-the-loop approvals.
-4. **Execute bounded actions** through sandboxed GitOps and cloud adapters.
-5. **Verify outcomes** with continuous post-execution monitoring and deterministic rollback.
+**CloudPilot SwitchOps** transforms cloud operations into an evidence-backed, human-in-the-loop autonomous control room orchestrated through **Switch AI**.
 
----
+### Core Operational Cycle:
+```
+OBSERVE → ANALYZE → OPTIMIZE → PROPOSE → APPROVE → EXECUTE → VERIFY → RECOVER → AUDIT
+```
 
-## 2. Business Problem Addressed
+1. **Observe**: Deterministic AST parsing of Terraform and Docker Compose infrastructure.
+2. **Analyze**: Specialist multi-agent synthesis across FinOps, SecOps, and SRE dimensions.
+3. **Optimize**: Multi-objective Pareto optimization (Cost vs. Risk vs. Reliability vs. Effort).
+4. **Formally Prove**: Z3 SMT constraint solving verifying non-negotiable security invariants and budget limits.
+5. **Propose**: Cryptographic SHA-256 locked change proposals published to Switch team rooms.
+6. **Approve**: Strict role-based human approval issuing single-use HMAC-SHA256 authorization tokens.
+7. **Execute**: Bounded mutations executed **strictly within isolated workspace sandboxes**.
+8. **Verify**: Independent syntactic AST re-parsing and state comparison before change acceptance.
+9. **Recover**: Instant atomic rollback restoration if verification or policy checks fail.
+10. **Audit**: Correlated end-to-end SQLite audit trail linking Task, Decision, Proposal, Approval, and Execution.
 
-Modern enterprise cloud management suffers from **The Operational Hand-off Gap**:
-- **Siloed Tooling**: FinOps, SecOps, and Platform Engineering tools produce disjointed alerts and spreadsheets that lack business context.
-- **Runaway Cloud Costs**: Infrastructure drifts silently with idle instances, unattached volumes, and over-provisioned clusters without unified review.
-- **Fear of Autonomous Changes**: Operators distrust black-box AI tools that attempt to modify production infrastructure without auditable consensus or human gating.
-- **Context Loss**: Change decisions made in ticket queues or private chats lack cryptographic audit trails linking the initial problem to the final verified outcome.
-
-**CloudPilot SwitchOps solves this by anchoring all operational collaboration in Switch**. Every request, acknowledgment, evidence finding, risk assessment, human approval, and execution summary lives in the shared Switch room history and an append-only database audit log.
-
----
-
-## 3. Why Switch is Essential (Switch Centrality)
-
-Switch is the foundational collaboration infrastructure for CloudPilot SwitchOps. **It is not a decorative chat plugin.**
-
-### The Switch Centrality Test
-> *"If Switch is unavailable, can a human still complete the same collaborative workflow through a separate application interface?"*  
-> **The answer is NO.**
-
-- **Shared Collaboration Surface**: The human-agent conversational handoff, intent capture, room instructions, and progress notifications strictly require Switch.
-- **Specialist Multi-Agent Team**: Specialist agents (`finops-specialist`, `secops-specialist`) post intermediate audit findings and breakdowns directly into the Switch room thread.
-- **Identity & Addressing**: Switch handles participant identity (`@operator:switch`), permissions, and addressed message routing (`message.addressed`).
-- **Unified Wire Protocol**: CloudPilot communicates with Switch using the official bidirectional wire protocol (WebSocket streaming for incoming events and HTTP for outbound messaging).
-- CloudPilot exposes health diagnostics and read-only state endpoints for operators, but does not provide a rogue chat interface bypassing Switch.
+> **NON-NEGOTIABLE SAFETY BOUNDARY:**  
+> CloudPilot SwitchOps enforces a zero live cloud mutation policy (`terraform apply`, `pulumi up`, and direct cloud provider write calls are strictly prohibited). Changes are executed only as bounded configuration mutations inside throwaway sandbox workspaces, leaving source samples completely read-only and preserved.
 
 ---
 
-## 4. Phase 2 System Architecture
+## 2. End-to-End Workflow Architecture
 
 ```mermaid
 flowchart TD
-    subgraph HumanCollaboration ["Switch Shared Collaboration Surface"]
-        Human["Human Operator / Platform Engineer\n(@operator:switch)"]
-        Room["Switch Room: cloudpilot-ops\n(Mattermost / Slack / Discord / Console)"]
-        Human <-->|Chat / Commands: @cloudpilot-ops-agent assess ./samples/staging| Room
+    subgraph SwitchPlatform ["Switch AI Collaboration Surface"]
+        Operator["Human Operator / Lead Architect\n(@platform-lead:switch)"]
+        SwitchRoom["Switch Collaboration Room: cloudpilot-ops\n(Inbound WS / Outbound REST)"]
+        Operator <-->|Chat / Room Commands| SwitchRoom
     end
 
-    subgraph SwitchCore ["Switch Infrastructure"]
-        Bridge["Switch Agent Bridge / Gateway\n(WebSocket + HTTP REST)"]
-        Room <-->|Event Buffer & Real-time Delivery| Bridge
-    end
-
-    subgraph CloudPilotBackend ["CloudPilot SwitchOps Backend (Modular Monolith)"]
-        Adapter["Switch Adapter Boundary\napp/integrations/switch\n(SwitchWireClient / EmulatedBridge)"]
-        Service["Task Lifecycle & Switch Coordinator\napp/services/TaskService"]
+    subgraph CloudPilotMonolith ["CloudPilot SwitchOps Engine (FastAPI)"]
+        WireAdapter["Switch Wire Adapter\n(WebSocket + REST Bridge)"]
+        TaskSvc["Task & Assessment Service"]
         
-        subgraph IntelligenceEngines ["Cloud Intelligence Engines"]
-            Discovery["Infrastructure Discovery Engine\napp/services/discovery\n(TerraformParser, ComposeParser)"]
-            FinOps["FinOps Intelligence Engine\napp/services/finops\n(PricingCatalog, FinOpsEngine)"]
-            SecOps["SecOps & SRE Engine\napp/services/secops\n(Rules SEC-001..010, REL-001..005)"]
-            
-            FinOpsAgent["FinOps Specialist Agent\napp/services/specialists/FinOpsSpecialist"]
-            SecOpsAgent["SecOps Specialist Agent\napp/services/specialists/SecOpsSpecialist"]
+        subgraph Specialists ["Specialist Multi-Agent Analysis"]
+            FinOps["FinOps Specialist\n(Pricing Catalog)"]
+            SecOps["SecOps Specialist\n(Deterministic Rules)"]
+            SRE["SRE Specialist\n(Reliability & SPOFs)"]
         end
 
-        Domain["Domain Contracts & State Machine\napp/domain\n(Task, Inventory, Finding, AssessmentSummary)"]
-        Persistence["Persistence Layer\napp/persistence\n(SQLiteTaskRepository)"]
-        API["HTTP API Endpoints\napp/api\n(/health/*, /api/v1/tasks, /api/v1/assessments)"]
+        subgraph DecisionEngine ["Decision Intelligence & Formal Proving"]
+            ParetoOpt["4-Objective Pareto Frontier\n(Cost, Risk, Reliability, Effort)"]
+            Z3Solver["Z3 Theorem Prover (SMT)\n(Hard Invariants & Budget)"]
+        end
 
-        Bridge <-->|WebSocket: Events & Pings (<=2s)\nHTTP: Outbound /message| Adapter
-        Adapter <-->|Addressed Message Events| Service
-        Service -->|Coordinates| Discovery
-        Discovery -->|Discovered Inventory| Service
-        Service -->|Dispatches| FinOpsAgent
-        Service -->|Dispatches| SecOpsAgent
-        FinOpsAgent --> FinOps
-        SecOpsAgent --> SecOps
-        Service -->|Saves State & Findings| Persistence
-        Persistence --> Domain
-        API --> Persistence
+        subgraph GovernanceSystem ["Human-in-the-Loop Governance"]
+            ProposalMgr["Proposal Manager\n(SHA-256 Locking)"]
+            AuthRbac["RBAC Directory &\nHMAC Token Signer"]
+        end
+
+        subgraph BoundedSandbox ["Bounded Execution & Safety Engine"]
+            SandboxCopy["Isolated Workspace Sandbox\n(Throwaway Copy)"]
+            ASTApplier["AST Mutation Engine\n(HCL & YAML Parser)"]
+            ASTVerifier["Independent AST Re-Parser"]
+            RollbackMgr["Atomic Snapshot Recovery"]
+        end
+
+        SQLiteDB[("Correlated SQLite Audit DB\n(Persistent Lineage)")]
     end
 
-    subgraph Storage ["CloudPilot Data Layer"]
-        DB[("SQLite Database\ncloudpilot_tasks.db\n(Tasks, Events, Evidence, Inventories, Findings, Assessments)")]
-        Catalog[("Pricing Catalog\ndata/pricing/catalog-v1.json\n(AWS & Docker SKUs, 730h Baseline)")]
-        Persistence <--> DB
-        FinOps <--> Catalog
-    end
+    SwitchRoom <-->|Event Stream / Outbound Messages| WireAdapter
+    WireAdapter --> TaskSvc
+    TaskSvc --> Specialists
+    Specialists --> DecisionEngine
+    DecisionEngine --> GovernanceSystem
+    GovernanceSystem -->|Announce Proposal| WireAdapter
+    SwitchRoom -->|In-Room Approval Command| WireAdapter
+    GovernanceSystem -->|Issue Signed Token| BoundedSandbox
+    BoundedSandbox --> ASTVerifier
+    ASTVerifier -->|Status & Lineage| SQLiteDB
+    ASTVerifier -->|Execution Outcome| WireAdapter
 ```
 
 ---
 
-## 5. Phase 2 Cloud Intelligence Capabilities
+## 3. The 14 Core Subsystems
 
-### A. Infrastructure Discovery Engine (`app.services.discovery`)
-- **Filesystem Security**: Rejects directory traversal (`../`), symlink escapes, bounds files to 1MB, and caps workspace scans at 100 files.
-- **Terraform HCL Parser**: Parses EC2, EBS, RDS, S3, Security Groups, ALBs. Distinguishes known static literals from dynamic variable expressions (`attributes_unknown`).
-- **Docker Compose Parser**: Parses services, images, port publishing, volumes, resource limits, capabilities, with automated regex secret redaction (`[REDACTED]`).
-- **Read-Only Invariant**: Never executes code, mutations, or cloud write APIs.
-
-### B. FinOps Intelligence Engine (`app.services.finops`)
-- **Decimal Monetary Arithmetic**: Uses Python's `Decimal` with `ROUND_HALF_UP` quantization to eliminate IEEE-754 precision drift.
-- **Versioned Pricing Catalog**: Rate cards from `data/pricing/catalog-v1.json` modeling 730 standard monthly operating hours.
-- **Rules Evaluated**:
-  - `FIN-001`: Oversized compute instance (`m5.large`, `c5.xlarge`) in non-production.
-  - `FIN-002`: Missing CPU/memory resource limits on container services.
-  - `FIN-003`: Always-on staging database without off-hours auto-pause.
-  - `FIN-004`: Dynamic or unresolved pricing expressions requiring baseline fallback.
-  - `FIN-005`: Provisioned IOPS (`io2`) storage where general purpose (`gp3`) suffices.
-
-### C. SecOps & SRE Reliability Engine (`app.services.secops`)
-- **Security Rules**:
-  - `SEC-001`: Redis bound to public interface `0.0.0.0:6379`.
-  - `SEC-002`: Database listener port (5432, 3306) publicly published.
-  - `SEC-003`: Security group with unrestricted `0.0.0.0/0` ingress on sensitive ports.
-  - `SEC-004`: Privileged container mode enabled (`privileged: true`).
-  - `SEC-005`: Docker socket mount (`/var/run/docker.sock`).
-  - `SEC-006`: Host network mode enabled (`network_mode: host`).
-  - `SEC-007`: S3 bucket with public ACL or missing public access block.
-  - `SEC-008`: Unencrypted EBS volume.
-  - `SEC-009`: Unencrypted RDS instance.
-  - `SEC-010`: Plain-text sensitive credential committed in configuration.
-- **SRE & Reliability Rules**:
-  - `REL-001`: Missing container healthcheck.
-  - `REL-002`: Suboptimal or absent restart policy.
-  - `REL-003`: Single Point of Failure (single-AZ RDS database).
-  - `REL-004`: Missing container resource limits (noisy neighbor risk).
-  - `REL-005`: Stateful database service missing persistent volume storage.
-
-### D. Decision Intelligence, Bounded Optimization & Formal Verification (`app.services.decision`)
-- **Deterministic Candidate Generation**: Generates typed candidate changes (`RESIZE_COMPUTE`, `DOWNGRADE_STORAGE`, `SCHEDULE_DATABASE`, `RESTRICT_INGRESS`, `ENABLE_ENCRYPTION`, `MULTI_AZ_FAILOVER`) from Phase 2 findings.
-- **Bounded Combination Optimization ($k \le 3$)**: Evaluates both atomic candidates and compatible multi-candidate combinations (`COMPOSITE_PLAN`). Enforces deterministic enumeration, pairwise conflict rejection, dependency closure, and Decimal monetary aggregation.
-- **Hard Constraint Validation**: Enforces non-negotiable operational boundaries (`CONST-OPS-01`, `CONST-SEC-01`..`05`, `CONST-REL-01`, `CONST-FIN-01`).
-- **Formal Z3 SMT Theorem Proving**: Encodes budget inequalities, mandatory security/persistence invariants, and interaction exclusions into Microsoft Z3 (`z3-solver 5.3.3.0`), returning standardized `Z3_CONSTRAINTS_SAT`, `Z3_CONSTRAINTS_UNSAT`, `Z3_UNKNOWN`, or `Z3_UNAVAILABLE` statuses.
-- **Multi-Objective Scoring (Model v1.1)**: Strictly normalized and clamped `[0.0, 100.0]` scoring across Cost, Security, Reliability, and Simplicity. Robust to negative savings (cost additions) and zero-baseline environments.
-- **True Multi-Objective Pareto Optimization**: Partitions candidates into non-dominated Pareto frontier, strictly dominated, and infeasible sets without artificial pre-scalarization.
-- **Operator Preference Profiles**: Ranks Pareto-optimal candidates under `BALANCED`, `COST_FIRST`, `SECURITY_FIRST`, and `RELIABILITY_FIRST` profiles. Hard constraints can never be overridden by preferences.
-- **Tamper-Proof SHA-256 Evidence Provenance**: Generates cryptographic-grade SHA-256 digests over all decision inputs, findings, and policies with independent verification utility.
-- **Strict Read-Only Guarantee**: Operates completely in read-only analysis mode with zero file mutations or live cloud write operations.
-
-### E. Human-in-the-Loop Approval & Bounded Sandbox Execution (`app.services.approval`, `app.services.execution`)
-- **Closed-Loop 9-Stage Lifecycle**: `OBSERVE → ANALYZE → OPTIMIZE → PROPOSE → APPROVE → EXECUTE → VERIFY → RECOVER → AUDIT`.
-- **Proposal-Bound Invariance**: Binds every proposed change to pre-computed before-state and expected after-state SHA-256 hashes. If source files drift, execution is aborted fail-closed.
-- **Cryptographic HMAC-SHA256 Token Issuance**: Time-limited (`ttl_seconds`), nonce-bound, single-use tokens (`v1.<proposal_id>.<nonce>.<timestamp>.<hmac>`) verified with constant-time comparisons (`hmac.compare_digest`).
-- **Strict Role-Based Access Control (RBAC)**: Only authorized engineering leaders (`PLATFORM_LEAD`, `SECURITY_LEAD`, `FINOPS_LEAD`) can issue tokens or approve changes. Unauthorized roles (`OPERATOR`, `DEVELOPER`, `VIEWER`) are rejected with `403 Forbidden`.
-- **Isolated Sandbox Containment**: Mutations execute strictly within `.cloudpilot/workspaces/{execution_id}/`. Source samples (`samples/staging`) remain 100% read-only and unmodified.
-- **Structured Declarative Mutations**: Applies allowlisted HCL and YAML mutations (`MODIFY`, `UPDATE_ATTRIBUTE`, `REPLACE_VALUE`, `ADD_BLOCK`, `ADD`, `REMOVE`) with deterministic newlines (`\n`) for cross-platform hash reproducibility.
-- **Independent Syntax & Hash Verification**: Re-parses modified configurations with `TerraformParser` and `ComposeParser` and verifies that output file hashes match expected proposal hashes bit-for-bit.
-- **Automated Fail-Safe Rollback**: Captures pre-execution snapshots in `.cloudpilot_snapshot/` and automatically restores verified before-state files if syntax verification or hash checks fail.
-- **Cryptographic Hash-Chained Audit Trail**: Append-only event stream where each event is cryptographically linked: $\text{event\_hash}_i = \text{SHA256}(\text{prev\_hash} + \text{payload} + \dots)$.
-- **Zero Live Cloud Mutations**: Strictly guaranteed zero live cloud mutating operations (no `terraform apply`, `terraform destroy`, `pulumi up`, or live cloud provider write API calls).
+| # | Subsystem Name | Implementation & Architectural Role | Verification Status |
+| :-: | :--- | :--- | :-: |
+| **01** | **Discovery Engine** | AST parsing of Terraform (`python_hcl2`) & Docker Compose configurations | Hardened |
+| **02** | **Normalization Graph** | Cross-cloud resource normalization into an interconnected dependency graph | Hardened |
+| **03** | **FinOps Pricing Engine** | Deterministic catalog lookup (AWS/GCP/Azure) with offline estimate disclosure | Hardened |
+| **04** | **SecOps Rules Engine** | Deterministic security rule engine evaluating exposure, ports, and blast radius | Hardened |
+| **05** | **SRE Rules Engine** | Reliability posture evaluation, single-points-of-failure, and backup checks | Hardened |
+| **06** | **Specialist Coordinator** | Multi-agent synthesis consolidating FinOps, SecOps, and SRE assessments | Hardened |
+| **07** | **Multi-Objective Optimizer** | 4-objective Pareto frontier calculation (Cost, Risk, Reliability, Effort) | Hardened |
+| **08** | **Formal Constraint Solver** | Z3 Theorem Prover (SMT) proving hard invariants and composite budget bounds | Hardened |
+| **09** | **Decision Orchestrator** | Candidate generation, combination evaluation, and transparent decision reporting | Hardened |
+| **10** | **Approval Center** | 14-point review checklist, SHA-256 proposal locking, and RBAC token signing | Hardened |
+| **11** | **Bounded Execution Engine** | Isolated workspace sandboxes, AST mutations, and live cloud write prevention | Hardened |
+| **12** | **Verification & Recovery** | Independent AST syntax re-parsing, hash comparison, and atomic rollback | Hardened |
+| **13** | **Switch Wire Adapter** | WebSocket streaming + REST outbound bridge with truthful telemetry fallback | Hardened |
+| **14** | **Operator Control Room** | Unified dashboard mounted at `/dashboard`, direct REST API binding across all areas | Remediated & Hardened |
 
 ---
 
-## 6. Demonstration Scenarios
+## 4. Human-in-the-Loop Governance: 14-Point Review
 
-The repository includes realistic infrastructure scenarios in `samples/`:
+CloudPilot never executes an unapproved change or a change different from the exact diff that an authorized human reviewed. Every proposal undergoes the **14-Point Governance Review**:
 
-1. **`samples/staging` (Deliberate Architectural Trade-Offs)**:
-   - Terraform configuration declaring an oversized `m5.large` instance, `io2` provisioned IOPS storage, unencrypted `aws_db_instance`, public S3 bucket, and unrestricted security group ingress (`0.0.0.0/0`).
-   - Docker Compose file declaring unauthenticated Redis on `0.0.0.0:6379`, Postgres with hardcoded password and no persistent volume, and a privileged daemon mounting `/var/run/docker.sock`.
-   - **Assessment Outcome**: Flags 10 security issues, 5 reliability deficits, 4 FinOps flags, and \$212.83/mo baseline.
-
-2. **`samples/safe` (Hardened, Rightsized Baseline)**:
-   - Rightsized `t3.micro` instance, `gp3` encrypted storage, multi-AZ encrypted RDS, private S3 bucket with `aws_s3_bucket_public_access_block`, restricted ingress CIDR (`10.0.1.0/24`), healthchecked container services with persistent volumes.
-   - **Assessment Outcome**: Zero critical or high security findings, \$38.25/mo baseline.
-
----
-
-## 7. Switch Team Room Workflow
-
-1. **Infrastructure Investigation**:
-   ```text
-   @cloudpilot-ops-agent assess ./samples/staging for cost, security and reliability risks. Read-only assessment. Do not modify anything.
-   ```
-2. **Decision Intelligence & Trade-Off Optimization**:
-   ```text
-   @cloudpilot-ops-agent decide on staging infrastructure optimization. Recommend optimal trade-off balancing cost and security. Read-only.
-   ```
-   - Automatically computes Pareto frontier, runs formal Z3 verification, and posts executive decision summary.
-   - Automatically issues a formal `Proposal` with pre-computed SHA-256 before/after state hashes and announces it in the room.
-3. **Human Approval & Bounded Sandbox Execution**:
-   ```text
-   @cloudpilot-ops-agent approve proposal prop-03b1133ced
-   ```
-   - Authorizes change under caller's verified role (`PLATFORM_LEAD`, `SECURITY_LEAD`, `FINOPS_LEAD`).
-   - Provisions isolated workspace `.cloudpilot/workspaces/{execution_id}`, takes snapshot, applies declarative mutations, validates syntax and hashes, commits execution, and streams verification report to Switch room.
-4. **Human Rejection**:
-   ```text
-   @cloudpilot-ops-agent reject proposal prop-03b1133ced
-   ```
-   - Terminates proposal immediately, marks status `REJECTED`, and records audit reason.
+1. **Exact AST Target**: Verified against the discovered inventory model.
+2. **Pre-Mutation SHA-256 Locked**: Recorded and verified prior to any modification.
+3. **Zero Live Cloud Mutations**: Verified boundary preventing cloud provider write calls.
+4. **Sandbox Isolation**: Executed strictly in temporary copies (`tempfile` directory).
+5. **Multi-Objective Pareto Rank**: Mathematically optimal trade-off score.
+6. **Formal Z3 SMT SAT Status**: Constraint satisfiability proven by Z3 solver.
+7. **Hard Invariant 1**: Zero public database exposure allowed.
+8. **Hard Invariant 2**: Persistent storage volumes strictly retained.
+9. **Hard Invariant 3**: Zero unprivileged container security escalation.
+10. **Budget Ceiling**: Aggregate post-change spend strictly within configured ceiling.
+11. **Server-Side RBAC**: Authorization checked against server directory (`PLATFORM_LEAD`).
+12. **Cryptographic HMAC Token**: Single-use token bound to exact `(proposal_id, sha256, approver_id)`.
+13. **Independent Syntax Re-Parsing**: Validated by parser before change acceptance.
+14. **Correlated Audit Record**: Persisted in SQLite with correlation IDs across all phases.
 
 ---
 
-## 8. Running the Application & APIs
+## 5. Formal Verification with Z3 SMT Solver
 
-### Start Server
-```powershell
-.venv\Scripts\uvicorn.exe app.main:app --host 0.0.0.0 --port 8000 --reload
+Unlike heuristics or simple rule engines, CloudPilot SwitchOps uses the **Z3 Theorem Prover** to formally prove that candidate infrastructure changes satisfy operational and security invariants:
+
+$$\text{Satisfiable}(\text{Candidates}) \iff \bigwedge_{i} \text{Invariant}_i \land \sum \text{Cost}_{\text{after}} \le \text{Budget}_{\text{max}}$$
+
+The engine distinguishes:
+- `Z3_CONSTRAINTS_SAT`: Constraints and invariants are formally satisfiable.
+- `Z3_CONSTRAINTS_UNSAT`: A hard invariant or budget constraint is violated; candidate is disqualified.
+- `Z3_UNKNOWN`: Solver timed out or exceeded complexity bounds; treated fail-closed.
+- `Z3_UNAVAILABLE`: Solver dependency missing; fails closed to prevent unverified changes.
+
+---
+
+## 6. Switch Collaboration Wire Protocol
+
+CloudPilot integrates natively with the Switch collaboration platform using a dual-mode wire protocol:
+
+- **Inbound Event Stream (WebSocket):**  
+  `GET {switch_bridge_ws_url}/agents/{agent_id}/connection/ws`  
+  Streams in-room messages, operator review commands, and approval instructions in real time.
+- **Outbound Message Channel (HTTP REST):**  
+  `POST {switch_bridge_url}/rooms/{room_id}/messages`  
+  Publishes formatted proposal reviews, specialist summaries, and verified execution outcomes.
+- **Truthful Fallback Engine:**  
+  When external Switch bridge infrastructure is absent, CloudPilot operates cleanly in `EMULATED_MODE` without faking network confirmations, truthfully reporting:
+  `SUBMISSION_READY_WITH_DOCUMENTED_EXTERNAL_LIMITATION`.
+
+---
+
+## 7. Unified Operator Control Room Dashboard
+
+Served directly by the main FastAPI application at `/dashboard`, the dashboard connects directly to live REST APIs without non-functional mock buttons:
+
+```
+http://localhost:8000/dashboard
 ```
 
-### Assessment & Decision API Endpoints
-- **Run Assessment**: `POST http://localhost:8000/api/v1/assessments/run`
-- **Get Assessment**: `GET http://localhost:8000/api/v1/assessments/{task_id}`
-- **Get Discovered Inventory**: `GET http://localhost:8000/api/v1/assessments/{task_id}/inventory`
-- **Filter Findings**: `GET http://localhost:8000/api/v1/assessments/{task_id}/findings?category=FINOPS&severity=CRITICAL`
-- **Cost Breakdown**: `GET http://localhost:8000/api/v1/assessments/{task_id}/cost-breakdown`
-- **Run Decision Optimization**: `POST http://localhost:8000/api/v1/decisions/run`
-- **Get Decision Run**: `GET http://localhost:8000/api/v1/decisions/{decision_id}`
-- **Get Evaluated Candidates**: `GET http://localhost:8000/api/v1/decisions/{decision_id}/candidates?feasible_only=true`
-- **Get Pareto Frontier**: `GET http://localhost:8000/api/v1/decisions/{decision_id}/pareto`
-- **Get Constraint Violations**: `GET http://localhost:8000/api/v1/decisions/{decision_id}/constraints`
-- **Get Full Decision Report**: `GET http://localhost:8000/api/v1/decisions/{decision_id}/report`
-
-### Phase 4 Proposal, Approval & Bounded Execution Endpoints
-- **Create Proposal**: `POST http://localhost:8000/api/v1/proposals`
-- **List Proposals**: `GET http://localhost:8000/api/v1/proposals?decision_id=...&status=...`
-- **Get Proposal by ID**: `GET http://localhost:8000/api/v1/proposals/{proposal_id}`
-- **Issue Approval Token**: `POST http://localhost:8000/api/v1/approvals/{proposal_id}/token` (Headers: `x-user-id`, `x-user-role`)
-- **Submit Human Approval**: `POST http://localhost:8000/api/v1/approvals/{proposal_id}/approve` (Headers: `x-user-id`, `x-user-role`, Body: `{"token": "..."}`)
-- **Submit Human Rejection**: `POST http://localhost:8000/api/v1/approvals/{proposal_id}/reject` (Headers: `x-user-id`, `x-user-role`, Body: `{"reason": "..."}`)
-- **Get Approval Record**: `GET http://localhost:8000/api/v1/approvals/{proposal_id}`
-- **Execute Approved Proposal**: `POST http://localhost:8000/api/v1/executions/{proposal_id}/execute` (Headers: `x-user-id`, `x-user-role`, Body: `{"token": "...", "target_workspace_root": "samples/staging"}`)
-- **Get Execution Record**: `GET http://localhost:8000/api/v1/executions/{proposal_id}`
-- **Get Cryptographic Audit Trail**: `GET http://localhost:8000/api/v1/executions/{execution_id}/audit`
-- **Swagger UI**: `http://localhost:8000/docs`
+- **Area A: Infrastructure Overview (`/api/v1/tasks`):** Discovered resources, configuration files, and normalized inventory.
+- **Area B: Specialist Analysis (`/api/v1/assessments/{task_id}`):** FinOps spend breakdown, SecOps exposure findings, and SRE reliability status.
+- **Area C: Decision Intelligence (`/api/v1/decisions`):** 4-objective Pareto frontier table, Z3 solver status badge, and recommended action.
+- **Area D: Approval Center (`/api/v1/proposals`, `/api/v1/approvals`):** Proposal ID, SHA-256 hash, diff preview, 14-point review checklist, and Approve/Reject buttons.
+- **Area E: Sandbox Execution (`/api/v1/executions`):** Isolated workspace path, before/after SHA-256 hashes, syntax re-parsing status, and live execution console.
+- **Area F: Switch Collaboration (`/health/switch`):** Truthful connection mode (`EMULATED` or `LIVE`), room telemetry, and in-room event feed.
+- **Area G: Correlated Audit Trail:** Traceable timeline linking Task ID -> Assessment ID -> Decision ID -> Proposal ID -> Approval Token -> Execution ID.
 
 ---
 
-## 9. Running Tests
+## 8. Quick Start Guide (< 2 Minutes)
 
-Run complete test suite across all phases (Unit, Integration, Contract, Formal SMT, and Foundation tests):
-```powershell
-.venv\Scripts\pytest.exe tests docker/tests/test_platform_foundation.py -v
-```
-**Test Results**: **173 passed in 37.07s (100% passing, 0 failures)**
+### Prerequisites
+- Python 3.11+
+- Git
 
-Run Phase 4 Human Approval & Bounded Execution tests specifically:
-```powershell
-.venv\Scripts\pytest.exe tests/unit/test_approval_system.py tests/unit/test_workspace_isolation.py tests/unit/test_bounded_execution.py tests/unit/test_execution_recovery.py tests/integration/test_switch_approval_workflow.py tests/integration/test_execution_api.py -v
+### 1. Clone & Set Up Virtual Environment
+```bash
+git clone https://github.com/shankarsai000/CloudPilot-SwitchOps.git
+cd CloudPilot-SwitchOps
+
+# Windows:
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# Linux / macOS:
+# python3 -m venv .venv && source .venv/bin/activate
+
+pip install -r requirements.txt
 ```
-**Test Results**: **31 passed in 7.29s (100% passing, 0 failures)**
+
+### 2. Run Automated Verification Suite
+```bash
+pytest tests docker/tests/test_platform_foundation.py -q
+# Expected: 243 passed
+```
+
+### 3. Launch Standalone Demonstrations
+```bash
+# Positive 18-step golden path workflow:
+python scripts/demo_submission.py
+
+# Negative 5-gate adversarial safety verification:
+python scripts/demo_submission_negative.py
+```
+
+### 4. Start the Application & Open Dashboard
+```bash
+python -m app.main
+```
+Open your browser to:
+```
+http://localhost:8000/dashboard
+```
 
 ---
 
-## 10. Documentation Index
+## 9. REST API Reference
 
-### Phase 4 Human Approval & Bounded Execution
-- [Phase 4 Architecture Blueprint](docs/phase4-architecture.md): 9-stage lifecycle, HMAC tokens, isolated sandbox containment, and rollback recovery.
-- [Human Approval System](docs/approval-system.md): Role-based access control, cryptographic token mechanics, and Switch room approval triggers.
-- [Bounded Execution & Safety](docs/bounded-execution.md): Sandbox layout, structured change applier, syntax validation, and hash-chained audit trails.
+| Endpoint | Method | Description |
+| :--- | :---: | :--- |
+| `/health/ready` | `GET` | Application and persistence readiness probe |
+| `/health/switch` | `GET` | Truthful Switch connection telemetry & wire state |
+| `/api/v1/tasks` | `POST` | Create infrastructure discovery & assessment task |
+| `/api/v1/tasks/{task_id}` | `GET` | Get task lifecycle status and inventory counts |
+| `/api/v1/assessments/{task_id}` | `GET` | Retrieve FinOps, SecOps, and SRE multi-agent findings |
+| `/api/v1/decisions` | `POST` | Execute multi-objective Pareto optimization and Z3 solving |
+| `/api/v1/decisions/{decision_id}` | `GET` | Retrieve decision run report, Pareto frontier, and Z3 status |
+| `/api/v1/proposals` | `POST` | Generate SHA-256 locked proposal from decision run |
+| `/api/v1/proposals/{proposal_id}` | `GET` | Inspect proposal details, diff, and pre-mutation hash |
+| `/api/v1/approvals/{proposal_id}/token` | `POST` | Request signed HMAC-SHA256 approval token for principal |
+| `/api/v1/approvals/{proposal_id}/approve`| `POST` | Grant role-based approval using valid token |
+| `/api/v1/approvals/{proposal_id}/reject` | `POST` | Reject change proposal and halt workflow |
+| `/api/v1/executions/{proposal_id}/execute`| `POST`| Execute approved proposal inside isolated sandbox |
+| `/api/v1/executions/{execution_id}` | `GET` | Retrieve execution record, before/after hashes, syntax check |
+| `/dashboard` | `GET` | Unified operator control room frontend |
 
-### Phase 3 Decision Intelligence Specifications
-- [Decision Intelligence Engine](docs/decision-intelligence.md): Seven-stage pipeline, objective scoring, and formal guarantees.
-- [Candidate Generation Engine](docs/candidate-generation.md): Finding-to-candidate derivation, typed mutations, and adversarial tests.
-- [Constraint Engine & Z3 Solver](docs/constraint-engine.md): Hard constraint catalog, Z3 theorem proving, and budget ceilings.
-- [Multi-Objective Pareto Optimization](docs/pareto-optimization.md): Vector dominance mathematics, non-dominated frontier, and preference profiles.
-- [Recommendation Model & Traceability](docs/recommendation-model.md): Executive synthesis, trade-off explanations, and evidence lineage.
-- [Decision REST API Reference](docs/decision-api.md): Detailed endpoint catalog, request/response schemas, and query parameters.
-- [Decision Verification & Testing](docs/decision-testing.md): Test suite matrix, Z3 SAT/UNSAT assertions, and read-only invariants.
-- [Phase 3 Architecture Blueprint](docs/phase3-architecture.md): Component diagrams, domain models, and scope boundaries.
+---
 
-### Phase 1 & 2 Foundations
-- [Architecture Guide](docs/architecture.md): Modular boundaries, domain contracts, and Switch centrality.
-- [Infrastructure Discovery Engine](docs/infrastructure-discovery.md): Filesystem protections, parsers, and normalized schema.
-- [FinOps Intelligence Engine](docs/finops-engine.md): Pricing catalog, Decimal arithmetic, and financial hygiene rules.
-- [Security Rule Catalog](docs/security-rules.md): Complete specifications for rules `SEC-001` through `SEC-010`.
-- [Reliability & SRE Analysis](docs/reliability-analysis.md): Complete specifications for rules `REL-001` through `REL-005`.
-- [Evidence & Findings Model](docs/evidence-model.md): Schema, confidence scoring, and SQLite persistence.
-- [Switch Integration Guide](docs/switch-integration.md): Wire protocol specification, WebSocket streaming, and room setup.
-- [Testing Guide](docs/testing.md): Automated testing strategy, test layers, and verification commands.
+## 10. Role-Based Access Control (RBAC) Matrix
+
+CloudPilot enforces server-side identity verification via `ServerSidePrincipalAuthenticator`:
+
+| Registered Principal | Server-Side Assigned Role | Can View Dashboard | Can Request Optimization | Can Authorize Proposal | Can Execute in Sandbox |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| `lead-platform` | `PLATFORM_LEAD` | Yes | Yes | **Yes** | **Yes** |
+| `sec-lead` | `SECURITY_LEAD` | Yes | Yes | **Yes** | **Yes** |
+| `finops-lead` | `FINOPS_LEAD` | Yes | Yes | **Yes** | No |
+| `junior-ops` | `OPERATOR` | Yes | Yes | No | No |
+| `guest-viewer` | `VIEWER` | Yes | No | No | No |
+
+---
+
+## 11. Truthful Operational Disclosures
+
+1. **Switch Connectivity**: Unless external Switch Agent Bridge credentials are provided via environment variables, the system operates in verified `EMULATED_MODE`. It never fabricates remote server receipts.
+2. **FinOps Pricing Estimates**: Pricing calculations are derived from static AWS, GCP, and Azure public catalog tables. They are baseline engineering estimates, not live cloud billing data.
+3. **Local SQLite Persistence**: Audit trail records are stored in a local SQLite relational database. They represent rigorous local evidence records.
+4. **Readiness Classification**: The release is truthfully classified as:  
+   **`SUBMISSION_READY_WITH_DOCUMENTED_EXTERNAL_LIMITATION`**.
+
+---
+
+## 12. Authors, Acknowledgments & License
+
+- **Author:** CloudPilot SwitchOps Core Team
+- **Hackathon:** Flip the Switch — Track 01: Best Business Workflow
+- **Collaboration Platform:** Switch AI ([switchagents.ai](https://switchagents.ai/))
+- **License:** Apache License 2.0 (see [LICENSE](LICENSE))

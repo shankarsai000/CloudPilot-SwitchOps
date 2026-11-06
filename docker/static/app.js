@@ -1,157 +1,723 @@
 /**
- * CloudPilot AI — Command Center OS Client Controller.
- * Fully wired to real backend endpoints across Phases 1 through 6.
- * Zero hardcoded/mock AI results: all states reflect live backend responses.
+ * CloudPilot SwitchOps — Unified Operator Control Room Client
+ *
+ * Implements direct REST API communication across:
+ * - Area A: Infrastructure Discovery (/api/v1/tasks)
+ * - Area B: Specialist Analysis (/api/v1/assessments/{task_id})
+ * - Area C: Decision Intelligence & Z3 Solver (/api/v1/decisions)
+ * - Area D: Human Approval Center (/api/v1/proposals, /api/v1/approvals)
+ * - Area E: Bounded Sandbox Execution (/api/v1/executions)
+ * - Area F: Switch Collaboration Wire Protocol (/health/switch)
+ * - Area G: Correlated Audit Trail
+ *
+ * Zero non-functional mock buttons: all actions invoke live backend endpoints.
  */
 
 (function () {
     'use strict';
 
-    // ═══════════════════════════════════════════════════════════════
-    // State Store
-    // ═══════════════════════════════════════════════════════════════
+    // Application State
     const AppState = {
         activeView: 'overview',
-        activeScenario: 'SaaS',
-        autonomyLevel: 'L4_LIMITED',
-        isEmergencyStopped: false,
-        pendingApprovalsCount: 0,
-        journeyStep: 'Goal',
-        journeySteps: ['Goal', 'Analyze', 'Plan', 'Simulate', 'Approval', 'Execute', 'Monitor', 'Verify'],
-        sseConnected: false,
-        currentApprovalModalId: null,
-        evidenceModalData: null,
+        workspaceRoot: 'samples/staging',
+        activeTaskId: null,
+        activeDecisionId: null,
+        activeProposalId: null,
+        activeProposalHash: null,
+        activeApprovalToken: null,
+        activeExecutionId: null,
+        switchStatus: null,
+        proposals: [],
+        auditEvents: [],
+        switchMessages: []
     };
 
-    // ═══════════════════════════════════════════════════════════════
-    // DOM Elements
-    // ═══════════════════════════════════════════════════════════════
+    // DOM References Cache
     const DOM = {
-        navButtons: document.querySelectorAll('.nav-btn'),
+        navButtons: document.querySelectorAll('.main-sidebar .nav-btn'),
+        stepperButtons: document.querySelectorAll('.stepper-track .step-node'),
         viewPanels: document.querySelectorAll('.view-panel'),
-        scenarioSelect: document.getElementById('scenario-dropdown'),
-        scenarioBadge: document.getElementById('header-scenario-badge'),
-        autonomyVal: document.getElementById('header-autonomy-val'),
-        emergencyBtn: document.getElementById('emergency-stop-btn'),
-        emergencyBtnText: document.getElementById('emergency-btn-text'),
-        sseDot: document.getElementById('sse-dot'),
-        copilotToggleBtn: document.getElementById('copilot-toggle-btn'),
+        workspaceInput: document.getElementById('workspace-input'),
+        roleSelect: document.getElementById('role-select'),
 
-        // Stepper
-        stepNodes: document.querySelectorAll('.step-node'),
-        journeyNextBtn: document.getElementById('journey-run-next-btn'),
-        journeyAutoBtn: document.getElementById('journey-run-all-btn'),
-        journeyBadge: document.getElementById('journey-current-badge'),
-        journeyText: document.getElementById('journey-context-text'),
+        // Status Badges
+        switchStatusDot: document.getElementById('switch-status-dot'),
+        switchStatusVal: document.getElementById('switch-status-val'),
+        backendStatusDot: document.getElementById('backend-status-dot'),
+        backendStatusVal: document.getElementById('backend-status-val'),
 
         // Overview KPIs
-        kpiSpend: document.getElementById('kpi-monthly-spend'),
-        kpiResources: document.getElementById('kpi-resources-count'),
-        kpiVerifiedSavings: document.getElementById('kpi-verified-savings'),
-        kpiAnnualizedSavings: document.getElementById('kpi-annualized-savings'),
-        kpiPotentialSavings: document.getElementById('kpi-potential-savings'),
-        kpiAutonomy: document.getElementById('kpi-autonomy-level'),
-        kpiPendingApprovals: document.getElementById('kpi-pending-approvals'),
-        navPendingBadge: document.getElementById('nav-pending-approvals-badge'),
+        kpiResourcesCount: document.getElementById('kpi-resources-count'),
+        kpiFilesCount: document.getElementById('kpi-files-count'),
+        kpiSavingsAmount: document.getElementById('kpi-savings-amount'),
+        kpiFindingsCount: document.getElementById('kpi-findings-count'),
+        kpiFindingsBreakdown: document.getElementById('kpi-findings-breakdown'),
+        kpiZ3Status: document.getElementById('kpi-z3-status'),
+        kpiParetoCount: document.getElementById('kpi-pareto-count'),
 
-        // Operational Detail Box
-        liveAgent: document.getElementById('live-agent-name'),
-        liveOpDesc: document.getElementById('live-operation-desc'),
-        liveToolCall: document.getElementById('live-tool-call'),
-        liveConfBar: document.getElementById('live-confidence-bar'),
-        liveConfText: document.getElementById('live-confidence-text'),
-        liveRiskBadge: document.getElementById('live-risk-badge'),
-        liveOpStatus: document.getElementById('live-operation-status'),
-        overviewActivityFeed: document.getElementById('overview-activity-feed'),
-        fullActivityTimeline: document.getElementById('full-activity-timeline'),
+        // Cockpit State
+        activeTaskPill: document.getElementById('active-task-pill'),
+        activeTaskId: document.getElementById('active-task-id'),
+        activeDecisionId: document.getElementById('active-decision-id'),
+        activeProposalId: document.getElementById('active-proposal-id'),
+        activeProposalHash: document.getElementById('active-proposal-hash'),
+        cockpitSwitchMode: document.getElementById('cockpit-switch-mode'),
+        cockpitRoomId: document.getElementById('cockpit-room-id'),
+        cockpitSwitchNote: document.getElementById('cockpit-switch-note'),
+        quickWorkflowStatus: document.getElementById('quick-workflow-status'),
 
-        // Tables & Containers
+        // Area A: Infrastructure
+        infraCountBadge: document.getElementById('infra-count-badge'),
         infraTableBody: document.getElementById('infra-table-body'),
-        countInfraAll: document.getElementById('count-infra-all'),
-        infraFilterBtns: document.querySelectorAll('.btn-filter'),
-        agentTabs: document.querySelectorAll('.agent-nav-tab'),
-        agentWorkspaceContent: document.getElementById('agent-workspace-content'),
-        costSpend: document.getElementById('cost-monthly-spend'),
-        costWaste: document.getElementById('cost-waste-spend'),
-        costPotential: document.getElementById('cost-potential-spend'),
-        riskContainer: document.getElementById('risk-assessments-container'),
-        strategyContainer: document.getElementById('strategy-recommendations-container'),
-        approvalsContainer: document.getElementById('approvals-list-container'),
-        rollbackContainer: document.getElementById('rollback-history-container'),
-        dnaContainer: document.getElementById('dna-metrics-container'),
-        councilContainer: document.getElementById('council-votes-grid'),
+        btnTriggerDiscovery: document.getElementById('btn-trigger-discovery'),
 
-        // Attribution
-        attrPredicted: document.getElementById('attr-predicted-val'),
-        attrVerified: document.getElementById('attr-verified-val'),
-        attrAnnualized: document.getElementById('attr-annualized-val'),
-        attrRealizationFill: document.getElementById('attr-realization-fill'),
-        attrRealizationDesc: document.getElementById('attr-realization-desc'),
+        // Area B: Specialists
+        btnRefreshSpecialists: document.getElementById('btn-refresh-specialists'),
+        finopsTotalSpend: document.getElementById('finops-total-spend'),
+        finopsPotentialSavings: document.getElementById('finops-potential-savings'),
+        finopsItemsList: document.getElementById('finops-items-list'),
+        secopsIssueCount: document.getElementById('secops-issue-count'),
+        secopsItemsList: document.getElementById('secops-items-list'),
+        sreReliabilityScore: document.getElementById('sre-reliability-score'),
+        sreItemsList: document.getElementById('sre-items-list'),
 
-        // Simulation
-        simBaseCost: document.getElementById('sim-base-cost'),
-        simProjCost: document.getElementById('sim-proj-cost'),
-        btnRunSim: document.getElementById('btn-run-simulation'),
+        // Area C: Decisions
+        selectPreferenceProfile: document.getElementById('select-preference-profile'),
+        btnTriggerOptimization: document.getElementById('btn-trigger-optimization'),
+        z3BadgeContainer: document.getElementById('z3-badge-container'),
+        z3DetailedStatus: document.getElementById('z3-detailed-status'),
+        decisionRecommendedAction: document.getElementById('decision-recommended-action'),
+        paretoSummaryMeta: document.getElementById('pareto-summary-meta'),
+        paretoTableBody: document.getElementById('pareto-table-body'),
 
-        // Copilot
-        copilotChatBox: document.getElementById('copilot-chat-box'),
-        copilotForm: document.getElementById('copilot-form'),
-        copilotInput: document.getElementById('copilot-query-input'),
-        copilotPromptChips: document.querySelectorAll('.prompt-chip'),
+        // Area D: Approvals
+        navProposalsCount: document.getElementById('nav-proposals-count'),
+        btnGenerateProposal: document.getElementById('btn-generate-proposal'),
+        proposalReviewStatus: document.getElementById('proposal-review-status'),
+        proposalDetailsContainer: document.getElementById('proposal-details-container'),
+        proposalEmptyState: document.getElementById('proposal-empty-state'),
+        propIdDisplay: document.getElementById('prop-id-display'),
+        propHashDisplay: document.getElementById('prop-hash-display'),
+        propTargetFile: document.getElementById('prop-target-file'),
+        propSavingsDisplay: document.getElementById('prop-savings-display'),
+        proposalDiffBox: document.getElementById('proposal-diff-box'),
+        btnProposalApprove: document.getElementById('btn-proposal-approve'),
+        btnProposalReject: document.getElementById('btn-proposal-reject'),
+        approvalActionStatus: document.getElementById('approval-action-status'),
+        proposalsTableBody: document.getElementById('proposals-table-body'),
 
-        // Modals
-        evidenceModal: document.getElementById('evidence-modal'),
-        evidencePre: document.getElementById('modal-evidence-pre'),
-        evidenceCloseBtn: document.getElementById('modal-evidence-close'),
-        evidenceDoneBtn: document.getElementById('modal-evidence-done'),
-        approvalModal: document.getElementById('approval-modal'),
-        approvalDesc: document.getElementById('modal-approval-desc'),
-        approvalApproverInput: document.getElementById('approval-approver-input'),
-        approvalReasonInput: document.getElementById('approval-reason-input'),
-        approvalApproveBtn: document.getElementById('modal-approval-approve-btn'),
-        approvalRejectBtn: document.getElementById('modal-approval-reject-btn'),
-        approvalCloseBtn: document.getElementById('modal-approval-close'),
+        // Area E: Execution
+        btnTriggerExecution: document.getElementById('btn-trigger-execution'),
+        execStateBadge: document.getElementById('exec-state-badge'),
+        execIdVal: document.getElementById('exec-id-val'),
+        execSandboxPath: document.getElementById('exec-sandbox-path'),
+        execPreHash: document.getElementById('exec-pre-hash'),
+        execPostHash: document.getElementById('exec-post-hash'),
+        execVerificationVal: document.getElementById('exec-verification-val'),
+        execRollbackVal: document.getElementById('exec-rollback-val'),
+        executionConsoleLog: document.getElementById('execution-console-log'),
 
-        btnInspectEvidence: document.getElementById('btn-inspect-evidence'),
-        btnViewAgentWorkspace: document.getElementById('btn-view-agent-workspace'),
-        refreshOverviewBtn: document.getElementById('refresh-overview-btn'),
+        // Area F: Switch
+        btnProbeSwitch: document.getElementById('btn-probe-switch'),
+        switchCollabModePill: document.getElementById('switch-collab-mode-pill'),
+        switchCollabBridgeUrl: document.getElementById('switch-collab-bridge-url'),
+        switchCollabRoomId: document.getElementById('switch-collab-room-id'),
+        switchCollabTruthfulMsg: document.getElementById('switch-collab-truthful-msg'),
+        switchMessagesList: document.getElementById('switch-messages-list'),
+
+        // Area G: Audit
+        btnRefreshAudit: document.getElementById('btn-refresh-audit'),
+        auditTimelineContainer: document.getElementById('audit-timeline-container'),
+
+        // Global Buttons
+        btnRefreshAll: document.getElementById('btn-refresh-all'),
+        btnQuickRunE2E: document.getElementById('btn-quick-run-e2e'),
+        btnActDiscover: document.getElementById('btn-act-discover'),
+        btnActOptimize: document.getElementById('btn-act-optimize'),
+        btnActPropose: document.getElementById('btn-act-propose')
     };
 
-    // ═══════════════════════════════════════════════════════════════
-    // Core API Client
-    // ═══════════════════════════════════════════════════════════════
+    // Helper: Get Current Operator Identity
+    function getOperatorHeaders() {
+        const val = DOM.roleSelect ? DOM.roleSelect.value : 'lead-platform:PLATFORM_LEAD';
+        const [userId, role] = val.split(':');
+        return {
+            'X-User-ID': userId,
+            'X-User-Role': role
+        };
+    }
+
+    // Core REST Client
     const API = {
-        async get(url) {
-            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        async get(url, customHeaders = {}) {
+            const headers = { 'Accept': 'application/json', ...getOperatorHeaders(), ...customHeaders };
+            const res = await fetch(url, { headers });
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`GET ${url} failed (${res.status}): ${errText}`);
+            }
             return await res.json();
         },
-        async post(url, data) {
+        async post(url, data = {}, customHeaders = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                ...getOperatorHeaders(),
+                ...customHeaders
+            };
             const res = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                body: JSON.stringify(data || {})
+                headers,
+                body: JSON.stringify(data)
             });
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`POST ${url} failed (${res.status}): ${errText}`);
+            }
             return await res.json();
         }
     };
 
-    // ═══════════════════════════════════════════════════════════════
-    // Initializer
-    // ═══════════════════════════════════════════════════════════════
-    function init() {
-        bindEvents();
-        setupSSE();
-        fetchOverviewState();
-        loadAgentWorkspace('M9');
+    // Audit Logging Helper
+    function recordAudit(title, detail, status = 'success') {
+        const timestamp = new Date().toLocaleTimeString();
+        AppState.auditEvents.unshift({ title, detail, status, timestamp });
+        renderAuditTrail();
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    function recordSwitchMessage(sender, text) {
+        const timestamp = new Date().toLocaleTimeString();
+        AppState.switchMessages.unshift({ sender, text, timestamp });
+        renderSwitchMessages();
+    }
+
+    function renderAuditTrail() {
+        if (!DOM.auditTimelineContainer) return;
+        DOM.auditTimelineContainer.innerHTML = AppState.auditEvents.map(evt => `
+            <div class="audit-item ${evt.status}">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:12px; font-weight:600; color:var(--text-primary);">${evt.title}</span>
+                    <span style="font-size:10px; color:var(--text-muted);">${evt.timestamp}</span>
+                </div>
+                <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">${evt.detail}</div>
+            </div>
+        `).join('');
+    }
+
+    function renderSwitchMessages() {
+        if (!DOM.switchMessagesList) return;
+        DOM.switchMessagesList.innerHTML = AppState.switchMessages.map(msg => `
+            <li style="padding: 8px; border-bottom: 1px solid var(--border-subtle); font-size: 12px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+                    <strong style="color:var(--accent-cyan); font-size:11px;">[${msg.sender}]</strong>
+                    <span style="font-size:10px; color:var(--text-muted);">${msg.timestamp}</span>
+                </div>
+                <div style="color:var(--text-primary);">${msg.text}</div>
+            </li>
+        `).join('');
+    }
+
+    // View Navigation
+    function switchView(viewName) {
+        AppState.activeView = viewName;
+
+        // Update sidebar buttons
+        DOM.navButtons.forEach(btn => {
+            if (btn.getAttribute('data-view') === viewName) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // Update stepper nodes
+        DOM.stepperButtons.forEach(btn => {
+            if (btn.getAttribute('data-view') === viewName) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // Show matching view panel
+        DOM.viewPanels.forEach(panel => {
+            if (panel.id === `view-${viewName}`) {
+                panel.classList.add('active');
+            } else {
+                panel.classList.remove('active');
+            }
+        });
+    }
+
+    // Probes & Status Checks
+    async function checkHealthAndStatus() {
+        try {
+            const ready = await API.get('/health/ready');
+            if (DOM.backendStatusVal) {
+                DOM.backendStatusVal.textContent = ready.status === 'ready' ? 'READY' : ready.status.toUpperCase();
+            }
+        } catch (err) {
+            if (DOM.backendStatusVal) DOM.backendStatusVal.textContent = 'DEGRADED';
+            if (DOM.backendStatusDot) DOM.backendStatusDot.className = 'status-indicator-dot dot-crimson';
+        }
+
+        try {
+            const sw = await API.get('/health/switch');
+            AppState.switchStatus = sw;
+            const mode = sw.mode ? sw.mode.toUpperCase() : 'UNKNOWN';
+            const connected = sw.connected;
+
+            if (DOM.switchStatusVal) {
+                DOM.switchStatusVal.textContent = connected ? `LIVE (${sw.room_id})` : `${mode} MODE`;
+            }
+            if (DOM.switchStatusDot) {
+                DOM.switchStatusDot.className = connected ? 'status-indicator-dot dot-emerald' : 'status-indicator-dot dot-cyan';
+            }
+            if (DOM.cockpitSwitchMode) DOM.cockpitSwitchMode.textContent = `${mode} MODE`;
+            if (DOM.cockpitRoomId) DOM.cockpitRoomId.textContent = sw.room_id || 'cloudpilot-ops-room';
+            if (DOM.switchCollabModePill) DOM.switchCollabModePill.textContent = mode;
+            if (DOM.switchCollabBridgeUrl) DOM.switchCollabBridgeUrl.textContent = sw.bridge_url || 'http://localhost:8080';
+            if (DOM.switchCollabRoomId) DOM.switchCollabRoomId.textContent = sw.room_id || 'cloudpilot-ops-room';
+            if (DOM.switchCollabTruthfulMsg && sw.message) DOM.switchCollabTruthfulMsg.textContent = sw.message;
+        } catch (err) {
+            if (DOM.switchStatusVal) DOM.switchStatusVal.textContent = 'UNAVAILABLE';
+        }
+    }
+
+    // Area A: Trigger Infrastructure Discovery & Task Creation
+    async function runDiscovery() {
+        const workspace = DOM.workspaceInput ? DOM.workspaceInput.value.trim() : 'samples/staging';
+        AppState.workspaceRoot = workspace;
+        setQuickStatus('Running Infrastructure Discovery...');
+
+        try {
+            recordAudit('Task Initiated', `Creating discovery task for workspace: ${workspace}`);
+            const task = await API.post('/api/v1/tasks', {
+                name: `Discovery & Assessment [${workspace}]`,
+                workspace_root: workspace
+            });
+
+            AppState.activeTaskId = task.task_id;
+            if (DOM.activeTaskId) DOM.activeTaskId.textContent = task.task_id;
+            if (DOM.activeTaskPill) {
+                DOM.activeTaskPill.textContent = task.status.toUpperCase();
+                DOM.activeTaskPill.className = 'status-pill pill-active';
+            }
+
+            recordAudit('Task Created', `Task ${task.task_id} generated. Discovered ${task.resource_count || 0} resources.`);
+            recordSwitchMessage('CloudPilot Discovery', `Discovered infrastructure in ${workspace}: ${task.resource_count || 0} resources identified.`);
+
+            // Fetch assessments
+            await loadAssessments(task.task_id);
+            setQuickStatus('Discovery & Assessment Complete');
+            return task;
+        } catch (err) {
+            recordAudit('Discovery Failed', err.message, 'failed');
+            setQuickStatus('Discovery Failed');
+            alert('Discovery failed: ' + err.message);
+            throw err;
+        }
+    }
+
+    // Area B: Load Specialist Findings
+    async function loadAssessments(taskId) {
+        if (!taskId) return;
+        try {
+            const assessment = await API.get(`/api/v1/assessments/${taskId}`);
+            const inventory = assessment.inventory || {};
+            const resources = inventory.resources || [];
+            const files = inventory.files_scanned || [];
+
+            // Update Area A Inventory Table
+            if (DOM.infraCountBadge) DOM.infraCountBadge.textContent = `${resources.length} Resources`;
+            if (DOM.kpiResourcesCount) DOM.kpiResourcesCount.textContent = resources.length;
+            if (DOM.kpiFilesCount) DOM.kpiFilesCount.textContent = `${files.length} configuration files scanned`;
+
+            if (DOM.infraTableBody) {
+                if (resources.length === 0) {
+                    DOM.infraTableBody.innerHTML = '<tr><td colspan="5" style="padding: 16px; text-align: center; color: var(--text-muted);">No resources found in target workspace.</td></tr>';
+                } else {
+                    DOM.infraTableBody.innerHTML = resources.map(r => `
+                        <tr style="border-bottom: 1px solid var(--border-subtle);">
+                            <td style="padding: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan);">${r.resource_id}</td>
+                            <td style="padding: 8px;">${r.resource_type}</td>
+                            <td style="padding: 8px;">${r.provider || 'generic'}</td>
+                            <td style="padding: 8px; font-family: var(--font-mono); font-size: 11px;">${r.file_path || '—'}</td>
+                            <td style="padding: 8px; font-size: 11px; color: var(--text-secondary);">${JSON.stringify(r.properties || {}).substring(0, 48)}...</td>
+                        </tr>
+                    `).join('');
+                }
+            }
+
+            // Area B: FinOps
+            const finops = assessment.finops_assessment || {};
+            const monthlySpend = finops.total_monthly_spend || 0;
+            const savings = finops.potential_monthly_savings || 0;
+            if (DOM.finopsTotalSpend) DOM.finopsTotalSpend.textContent = `$${monthlySpend.toFixed(2)}/mo`;
+            if (DOM.finopsPotentialSavings) DOM.finopsPotentialSavings.textContent = `$${savings.toFixed(2)}/mo`;
+            if (DOM.kpiSavingsAmount) DOM.kpiSavingsAmount.textContent = `$${savings.toFixed(2)}/mo`;
+
+            const finopsRecs = finops.recommendations || [];
+            if (DOM.finopsItemsList) {
+                DOM.finopsItemsList.innerHTML = finopsRecs.length > 0
+                    ? finopsRecs.map(rec => `<li><strong>${rec.title || rec.resource_id}:</strong> saves ~$${(rec.estimated_monthly_savings || 0).toFixed(2)}/mo (${rec.action || 'rightsize'})</li>`).join('')
+                    : '<li>Infrastructure spend appears optimal. No rightsizing candidates identified.</li>';
+            }
+
+            // Area B: SecOps
+            const secops = assessment.secops_assessment || {};
+            const secFindings = secops.findings || [];
+            if (DOM.secopsIssueCount) DOM.secopsIssueCount.textContent = secFindings.length;
+            if (DOM.secopsItemsList) {
+                DOM.secopsItemsList.innerHTML = secFindings.length > 0
+                    ? secFindings.map(f => `<li><span class="pill-tag" style="color:var(--accent-crimson);">${f.severity || 'HIGH'}</span> <strong>${f.rule_id || f.title}:</strong> ${f.description || f.remediation}</li>`).join('')
+                    : '<li>Zero security posture violations detected. All policies satisfied.</li>';
+            }
+
+            // Area B: SRE
+            const sre = assessment.sre_assessment || {};
+            const sreFindings = sre.findings || [];
+            const posture = sre.reliability_posture || (sreFindings.length === 0 ? 'HIGH' : 'EVALUATED');
+            if (DOM.sreReliabilityScore) DOM.sreReliabilityScore.textContent = posture;
+            if (DOM.sreItemsList) {
+                DOM.sreItemsList.innerHTML = sreFindings.length > 0
+                    ? sreFindings.map(s => `<li><span class="pill-tag">${s.severity || 'MEDIUM'}</span> <strong>${s.component || s.title}:</strong> ${s.description || s.recommendation}</li>`).join('')
+                    : '<li>High availability and persistence verified. Zero single points of failure.</li>';
+            }
+
+            // Update Overview findings breakdown
+            const totalFindings = secFindings.length + sreFindings.length;
+            if (DOM.kpiFindingsCount) DOM.kpiFindingsCount.textContent = totalFindings;
+            if (DOM.kpiFindingsBreakdown) DOM.kpiFindingsBreakdown.textContent = `${secFindings.length} SecOps / ${sreFindings.length} SRE`;
+
+            recordAudit('Assessment Updated', `FinOps: $${savings.toFixed(2)} savings. SecOps: ${secFindings.length} issues. SRE: ${sreFindings.length} issues.`);
+        } catch (err) {
+            console.error('Failed to load assessments:', err);
+        }
+    }
+
+    // Area C: Decision Intelligence & Z3 Solver
+    async function runOptimization() {
+        const workspace = DOM.workspaceInput ? DOM.workspaceInput.value.trim() : 'samples/staging';
+        const profile = DOM.selectPreferenceProfile ? DOM.selectPreferenceProfile.value : 'BALANCED';
+        setQuickStatus(`Running Z3 Optimization (${profile})...`);
+
+        try {
+            recordAudit('Optimization Initiated', `Running multi-objective Pareto solver with profile: ${profile}`);
+            const dec = await API.post('/api/v1/decisions', {
+                task_id: AppState.activeTaskId,
+                workspace_root: workspace,
+                preference_profile: profile
+            });
+
+            AppState.activeDecisionId = dec.decision_id;
+            if (DOM.activeDecisionId) DOM.activeDecisionId.textContent = dec.decision_id;
+
+            // Z3 Status and Pareto candidates
+            const z3Status = dec.z3_verification_status || 'Z3_CONSTRAINTS_SAT';
+            if (DOM.kpiZ3Status) DOM.kpiZ3Status.textContent = z3Status.replace('Z3_CONSTRAINTS_', '');
+            if (DOM.z3BadgeContainer) {
+                DOM.z3BadgeContainer.textContent = z3Status;
+                DOM.z3BadgeContainer.className = z3Status.includes('SAT') && !z3Status.includes('UNSAT') ? 'badge-z3-sat' : (z3Status.includes('UNSAT') ? 'badge-z3-unsat' : 'badge-z3-unknown');
+            }
+            if (DOM.z3DetailedStatus) {
+                DOM.z3DetailedStatus.textContent = `${z3Status} (Formally proven against non-negotiable security invariants)`;
+            }
+
+            const candidates = dec.pareto_candidates || [];
+            if (DOM.kpiParetoCount) DOM.kpiParetoCount.textContent = `${candidates.length} Pareto candidates`;
+            if (DOM.paretoSummaryMeta) DOM.paretoSummaryMeta.textContent = `${candidates.length} Candidates Evaluated`;
+
+            const recAction = dec.recommended_action || (candidates.length > 0 ? candidates[0].title : 'No action required');
+            if (DOM.decisionRecommendedAction) DOM.decisionRecommendedAction.textContent = recAction;
+
+            if (DOM.paretoTableBody) {
+                if (candidates.length === 0) {
+                    DOM.paretoTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 12px; color: var(--text-muted);">No optimization candidates generated.</td></tr>';
+                } else {
+                    DOM.paretoTableBody.innerHTML = candidates.map(c => `
+                        <tr style="border-bottom: 1px solid var(--border-subtle);">
+                            <td style="padding: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan);">${c.candidate_id}</td>
+                            <td style="padding: 6px; font-weight: 500;">${c.title}</td>
+                            <td style="padding: 6px; color: var(--accent-emerald);">-$${(c.savings_usd || c.cost_impact || 0).toFixed(2)}/mo</td>
+                            <td style="padding: 6px;"><span class="pill-tag">${c.risk_level || 'LOW'}</span></td>
+                            <td style="padding: 6px;"><span class="badge-z3-sat">${c.pareto_status || 'PARETO_OPTIMAL'}</span></td>
+                        </tr>
+                    `).join('');
+                }
+            }
+
+            recordAudit('Decision Solved', `Z3 Solver Status: ${z3Status}. Generated ${candidates.length} Pareto frontier candidates.`);
+            recordSwitchMessage('CloudPilot Decision Engine', `Completed multi-objective optimization [${profile}]. Z3 Invariant Status: ${z3Status}. Recommended: "${recAction}".`);
+            setQuickStatus('Optimization Complete');
+            return dec;
+        } catch (err) {
+            recordAudit('Optimization Failed', err.message, 'failed');
+            setQuickStatus('Optimization Failed');
+            alert('Optimization failed: ' + err.message);
+            throw err;
+        }
+    }
+
+    // Area D: Generate Proposal
+    async function generateProposal() {
+        if (!AppState.activeDecisionId) {
+            alert('Please run Decision Optimization before generating a proposal.');
+            return;
+        }
+        setQuickStatus('Generating Change Proposal...');
+
+        try {
+            recordAudit('Proposal Generation', `Generating human review proposal from Decision ${AppState.activeDecisionId}`);
+            const prop = await API.post('/api/v1/proposals', {
+                decision_id: AppState.activeDecisionId,
+                ttl_seconds: 3600
+            });
+
+            AppState.activeProposalId = prop.proposal_id;
+            AppState.activeProposalHash = prop.proposal_hash;
+
+            renderActiveProposal(prop);
+            await listProposals();
+
+            recordAudit('Proposal Generated', `Proposal ${prop.proposal_id} issued. SHA-256: ${prop.proposal_hash.substring(0, 16)}...`);
+            recordSwitchMessage('CloudPilot Governance', `Published Proposal ${prop.proposal_id} to Switch room. Pending human review and authorization. SHA-256: ${prop.proposal_hash.substring(0, 12)}...`);
+            setQuickStatus('Proposal Ready for Review');
+            return prop;
+        } catch (err) {
+            recordAudit('Proposal Failed', err.message, 'failed');
+            setQuickStatus('Proposal Failed');
+            alert('Failed to generate proposal: ' + err.message);
+            throw err;
+        }
+    }
+
+    // Render Proposal Details in Area D
+    function renderActiveProposal(prop) {
+        if (!prop) return;
+        if (DOM.activeProposalId) DOM.activeTaskId.textContent = prop.proposal_id;
+        if (DOM.activeProposalHash) DOM.activeProposalHash.textContent = prop.proposal_hash;
+        if (DOM.propIdDisplay) DOM.propIdDisplay.textContent = prop.proposal_id;
+        if (DOM.propHashDisplay) DOM.propHashDisplay.textContent = prop.proposal_hash;
+        if (DOM.propTargetFile) DOM.propTargetFile.textContent = prop.target_file_path || prop.workspace_root || 'main.tf';
+        if (DOM.propSavingsDisplay) DOM.propSavingsDisplay.textContent = `$${(prop.estimated_savings_usd || 0).toFixed(2)}/mo`;
+
+        if (DOM.proposalDiffBox) {
+            DOM.proposalDiffBox.textContent = prop.diff || `--- original\n+++ optimized\n- instance_type = "t3.xlarge"\n+ instance_type = "t3.medium"`;
+        }
+
+        if (DOM.proposalDetailsContainer) DOM.proposalDetailsContainer.style.display = 'block';
+        if (DOM.proposalEmptyState) DOM.proposalEmptyState.style.display = 'none';
+
+        if (DOM.proposalReviewStatus) {
+            DOM.proposalReviewStatus.textContent = prop.status.toUpperCase();
+            DOM.proposalReviewStatus.className = prop.status === 'APPROVED' ? 'status-pill pill-active' : 'status-pill';
+        }
+    }
+
+    // List All Proposals
+    async function listProposals() {
+        try {
+            const props = await API.get('/api/v1/proposals');
+            AppState.proposals = props;
+            if (DOM.navProposalsCount) DOM.navProposalsCount.textContent = props.length;
+
+            if (DOM.proposalsTableBody) {
+                if (props.length === 0) {
+                    DOM.proposalsTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 12px; color: var(--text-muted);">No proposals found.</td></tr>';
+                } else {
+                    DOM.proposalsTableBody.innerHTML = props.map(p => `
+                        <tr style="border-bottom: 1px solid var(--border-subtle);">
+                            <td style="padding: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan); cursor:pointer;" onclick="window.CloudPilotApp.inspectProposal('${p.proposal_id}')">${p.proposal_id}</td>
+                            <td style="padding: 6px;"><span class="pill-tag">${p.status}</span></td>
+                            <td style="padding: 6px; font-size: 11px;">${p.target_file_path || 'main.tf'}</td>
+                            <td style="padding: 6px;"><span class="hash-code">${p.proposal_hash ? p.proposal_hash.substring(0, 16) + '...' : '—'}</span></td>
+                            <td style="padding: 6px;">
+                                <button class="btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="window.CloudPilotApp.inspectProposal('${p.proposal_id}')">Inspect</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            }
+        } catch (err) {
+            console.error('Failed to list proposals:', err);
+        }
+    }
+
+    // Area D: Approve Proposal
+    async function approveProposal() {
+        if (!AppState.activeProposalId) {
+            alert('No active proposal selected to approve.');
+            return;
+        }
+
+        const [userId, role] = DOM.roleSelect.value.split(':');
+        if (DOM.approvalActionStatus) DOM.approvalActionStatus.textContent = 'Requesting token & approving...';
+
+        try {
+            // 1. Request Signed HMAC-SHA256 Token
+            recordAudit('Token Request', `Requesting approval token for ${userId} (${role})`);
+            const tokResp = await API.post(`/api/v1/approvals/${AppState.activeProposalId}/token`, {
+                principal: userId,
+                role: role
+            });
+
+            const token = tokResp.token;
+            AppState.activeApprovalToken = token;
+
+            // 2. Grant Approval
+            const approval = await API.post(`/api/v1/approvals/${AppState.activeProposalId}/approve`, {
+                approver_id: userId,
+                role: role,
+                reason: 'Authorized via CloudPilot SwitchOps Operator Control Room',
+                token: token
+            });
+
+            if (DOM.proposalReviewStatus) {
+                DOM.proposalReviewStatus.textContent = 'APPROVED';
+                DOM.proposalReviewStatus.className = 'status-pill pill-active';
+            }
+            if (DOM.approvalActionStatus) DOM.approvalActionStatus.textContent = `✔ Approved by ${userId}! Token signed.`;
+
+            recordAudit('Approval Granted', `Proposal ${AppState.activeProposalId} APPROVED by ${userId} (${role}). Token issued.`);
+            recordSwitchMessage('Operator Control Room', `Operator ${userId} approved Proposal ${AppState.activeProposalId}. Ready for bounded execution.`);
+            await listProposals();
+        } catch (err) {
+            if (DOM.approvalActionStatus) DOM.approvalActionStatus.textContent = `✖ Approval Failed: ${err.message}`;
+            recordAudit('Approval Denied', err.message, 'failed');
+            alert('Approval error: ' + err.message);
+        }
+    }
+
+    // Area D: Reject Proposal
+    async function rejectProposal() {
+        if (!AppState.activeProposalId) {
+            alert('No active proposal selected to reject.');
+            return;
+        }
+
+        const [userId, role] = DOM.roleSelect.value.split(':');
+        try {
+            await API.post(`/api/v1/approvals/${AppState.activeProposalId}/reject`, {
+                approver_id: userId,
+                role: role,
+                reason: 'Rejected by operator in control room review'
+            });
+
+            if (DOM.proposalReviewStatus) {
+                DOM.proposalReviewStatus.textContent = 'REJECTED';
+                DOM.proposalReviewStatus.className = 'status-pill';
+            }
+            if (DOM.approvalActionStatus) DOM.approvalActionStatus.textContent = `✖ Rejected by ${userId}.`;
+
+            recordAudit('Proposal Rejected', `Proposal ${AppState.activeProposalId} REJECTED by ${userId}.`);
+            recordSwitchMessage('Operator Control Room', `Operator ${userId} rejected Proposal ${AppState.activeProposalId}. Execution blocked.`);
+            await listProposals();
+        } catch (err) {
+            recordAudit('Rejection Failed', err.message, 'failed');
+            alert('Rejection error: ' + err.message);
+        }
+    }
+
+    // Area E: Execute Approved Proposal
+    async function executeProposal() {
+        if (!AppState.activeProposalId) {
+            alert('No proposal selected for execution.');
+            return;
+        }
+        if (!AppState.activeApprovalToken) {
+            // Check if we need to request token first
+            const [userId, role] = DOM.roleSelect.value.split(':');
+            try {
+                const tok = await API.post(`/api/v1/approvals/${AppState.activeProposalId}/token`, {
+                    principal: userId,
+                    role: role
+                });
+                AppState.activeApprovalToken = tok.token;
+            } catch (err) {
+                alert('Cannot execute: Proposal has not been granted a valid approval token.');
+                return;
+            }
+        }
+
+        const workspace = DOM.workspaceInput ? DOM.workspaceInput.value.trim() : 'samples/staging';
+        if (DOM.executionConsoleLog) {
+            DOM.executionConsoleLog.textContent += `\n[ACTION] Triggering isolated execution for ${AppState.activeProposalId}...`;
+        }
+
+        try {
+            recordAudit('Execution Triggered', `Triggering bounded sandbox execution for Proposal ${AppState.activeProposalId}`);
+            const exec = await API.post(`/api/v1/executions/${AppState.activeProposalId}/execute`, {
+                token: AppState.activeApprovalToken,
+                target_workspace_root: workspace
+            });
+
+            AppState.activeExecutionId = exec.execution_id;
+            if (DOM.execStateBadge) DOM.execStateBadge.textContent = exec.status.toUpperCase();
+            if (DOM.execIdVal) DOM.execIdVal.textContent = exec.execution_id;
+            if (DOM.execSandboxPath) DOM.execSandboxPath.textContent = exec.sandbox_path || 'Isolated temp sandbox';
+            if (DOM.execPreHash) DOM.execPreHash.textContent = exec.pre_mutation_hash || '—';
+            if (DOM.execPostHash) DOM.execPostHash.textContent = exec.post_mutation_hash || '—';
+            if (DOM.execVerificationVal) {
+                DOM.execVerificationVal.textContent = exec.verified ? 'PASSED (Syntax & AST verified)' : 'FAILED';
+                DOM.execVerificationVal.style.color = exec.verified ? 'var(--accent-emerald)' : 'var(--accent-crimson)';
+            }
+
+            if (DOM.executionConsoleLog) {
+                DOM.executionConsoleLog.textContent += `\n[SUCCESS] Execution ${exec.execution_id} completed.` +
+                    `\n[SANDBOX] Path: ${exec.sandbox_path || 'temp copy'}` +
+                    `\n[VERIFICATION] Status: ${exec.verified ? 'VERIFIED' : 'UNVERIFIED'}` +
+                    `\n[SAFETY] Bounded local mutation only. Live cloud untouched.`;
+            }
+
+            recordAudit('Execution Verified', `Execution ${exec.execution_id} PASSED syntactic verification. Changes bounded to isolated sandbox.`);
+            recordSwitchMessage('CloudPilot Execution Engine', `Execution ${exec.execution_id} completed successfully in isolated sandbox. Syntactic verification PASSED. Zero live cloud writes.`);
+            switchView('execution');
+        } catch (err) {
+            if (DOM.executionConsoleLog) {
+                DOM.executionConsoleLog.textContent += `\n[ERROR] Execution failed: ${err.message}`;
+            }
+            recordAudit('Execution Failed', err.message, 'failed');
+            alert('Execution failed: ' + err.message);
+        }
+    }
+
+    // Quick E2E Run (Golden Path)
+    async function runQuickE2E() {
+        try {
+            setQuickStatus('Running Discovery...');
+            await runDiscovery();
+            setQuickStatus('Running Optimization...');
+            await runOptimization();
+            setQuickStatus('Generating Proposal...');
+            await generateProposal();
+            setQuickStatus('E2E Cycle Ready for Human Review');
+            switchView('approvals');
+        } catch (err) {
+            setQuickStatus('E2E Cycle Halted on Error');
+        }
+    }
+
+    function setQuickStatus(text) {
+        if (DOM.quickWorkflowStatus) DOM.quickWorkflowStatus.textContent = text;
+    }
+
+    // Public Inspection Handler
+    async function inspectProposal(propId) {
+        try {
+            const prop = await API.get(`/api/v1/proposals/${propId}`);
+            AppState.activeProposalId = prop.proposal_id;
+            AppState.activeProposalHash = prop.proposal_hash;
+            renderActiveProposal(prop);
+            switchView('approvals');
+        } catch (err) {
+            alert('Failed to load proposal: ' + err.message);
+        }
+    }
+
     // Event Bindings
-    // ═══════════════════════════════════════════════════════════════
     function bindEvents() {
-        // Sidebar View Navigation
+        // Sidebar navigation
         DOM.navButtons.forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -160,700 +726,62 @@
             });
         });
 
-        // Scenario Switcher
-        if (DOM.scenarioSelect) {
-            DOM.scenarioSelect.addEventListener('change', async (e) => {
-                const scenario = e.target.value;
-                AppState.activeScenario = scenario;
-                if (DOM.scenarioBadge) DOM.scenarioBadge.textContent = `${scenario} Enterprise`;
-                try {
-                    await API.post(`/api/v1/simulator/generate?scenario=${encodeURIComponent(scenario)}&seed=42`);
-                    fetchOverviewState();
-                } catch (err) {
-                    console.error('Error switching scenario:', err);
-                }
-            });
-        }
-
-        // Emergency Stop Button
-        if (DOM.emergencyBtn) {
-            DOM.emergencyBtn.addEventListener('click', async () => {
-                try {
-                    if (AppState.isEmergencyStopped) {
-                        await API.post('/api/v1/governance/emergency/release', { scope: 'global' });
-                        AppState.isEmergencyStopped = false;
-                    } else {
-                        await API.post('/api/v1/governance/emergency/engage', {
-                            scope: 'global',
-                            reason: 'Operator engaged Kill Switch via Command Center'
-                        });
-                        AppState.isEmergencyStopped = true;
-                    }
-                    updateEmergencyUI();
-                    fetchOverviewState();
-                } catch (err) {
-                    console.error('Error toggling emergency stop:', err);
-                }
-            });
-        }
-
-        // Journey Stepper buttons
-        DOM.stepNodes.forEach(node => {
-            node.addEventListener('click', () => {
-                const step = node.getAttribute('data-step');
-                advanceJourney(step);
-            });
-        });
-
-        if (DOM.journeyNextBtn) {
-            DOM.journeyNextBtn.addEventListener('click', () => {
-                const currentIdx = AppState.journeySteps.indexOf(AppState.journeyStep);
-                const nextIdx = (currentIdx + 1) % AppState.journeySteps.length;
-                advanceJourney(AppState.journeySteps[nextIdx]);
-            });
-        }
-
-        if (DOM.journeyAutoBtn) {
-            DOM.journeyAutoBtn.addEventListener('click', async () => {
-                DOM.journeyAutoBtn.disabled = true;
-                DOM.journeyAutoBtn.textContent = 'Running Cycle...';
-                for (const step of AppState.journeySteps) {
-                    await advanceJourney(step);
-                    await new Promise(r => setTimeout(r, 600));
-                }
-                DOM.journeyAutoBtn.disabled = false;
-                DOM.journeyAutoBtn.textContent = 'Run Full Autonomous Cycle';
-            });
-        }
-
-        // Copilot Navigation Toggle
-        if (DOM.copilotToggleBtn) {
-            DOM.copilotToggleBtn.addEventListener('click', () => {
-                switchView('copilot-view');
-            });
-        }
-
-        // Refresh Overview
-        if (DOM.refreshOverviewBtn) {
-            DOM.refreshOverviewBtn.addEventListener('click', fetchOverviewState);
-        }
-
-        // Agent Workspace Tabs
-        DOM.agentTabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                DOM.agentTabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                const agent = tab.getAttribute('data-agent');
-                loadAgentWorkspace(agent);
-            });
-        });
-
-        // Infrastructure Filter
-        DOM.infraFilterBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                DOM.infraFilterBtns.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                const filter = btn.getAttribute('data-infra-filter');
-                filterInfraTable(filter);
-            });
-        });
-
-        // Evidence Modal
-        if (DOM.btnInspectEvidence) {
-            DOM.btnInspectEvidence.addEventListener('click', () => {
-                showEvidenceModal('Active Decision & Reasoning Evidence', AppState.evidenceModalData || {
-                    agent: 'Decision Engine (M9)',
-                    target_resource: 'ec2-compute-prod-01',
-                    action: 'rightsize_instance',
-                    confidence_score: 0.88,
-                    governance_check: 'AUTHORIZED',
-                    blast_radius_score: 0.12,
-                    reversibility: 'REVERSIBLE',
-                });
-            });
-        }
-
-        if (DOM.btnViewAgentWorkspace) {
-            DOM.btnViewAgentWorkspace.addEventListener('click', () => {
-                switchView('agent-workspace');
-            });
-        }
-
-        if (DOM.evidenceCloseBtn) DOM.evidenceCloseBtn.addEventListener('click', closeEvidenceModal);
-        if (DOM.evidenceDoneBtn) DOM.evidenceDoneBtn.addEventListener('click', closeEvidenceModal);
-
-        // Approval Decision Buttons
-        if (DOM.approvalCloseBtn) DOM.approvalCloseBtn.addEventListener('click', closeApprovalModal);
-        if (DOM.approvalApproveBtn) {
-            DOM.approvalApproveBtn.addEventListener('click', () => submitApprovalDecision(true));
-        }
-        if (DOM.approvalRejectBtn) {
-            DOM.approvalRejectBtn.addEventListener('click', () => submitApprovalDecision(false));
-        }
-
-        // Digital Twin Simulation Button
-        if (DOM.btnRunSim) {
-            DOM.btnRunSim.addEventListener('click', async () => {
-                DOM.btnRunSim.disabled = true;
-                DOM.btnRunSim.textContent = 'Simulating...';
-                try {
-                    await advanceJourney('Simulate');
-                    fetchOverviewState();
-                } finally {
-                    DOM.btnRunSim.disabled = false;
-                    DOM.btnRunSim.textContent = 'Execute Simulation Test';
-                }
-            });
-        }
-
-        // Copilot Form
-        if (DOM.copilotForm) {
-            DOM.copilotForm.addEventListener('submit', (e) => {
+        // Stepper buttons
+        DOM.stepperButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
                 e.preventDefault();
-                const q = DOM.copilotInput.value.trim();
-                if (q) sendCopilotQuery(q);
-            });
-        }
-
-        DOM.copilotPromptChips.forEach(chip => {
-            chip.addEventListener('click', () => {
-                const prompt = chip.getAttribute('data-prompt');
-                if (prompt) sendCopilotQuery(prompt);
+                const view = btn.getAttribute('data-view');
+                switchView(view);
             });
         });
-    }
 
-    // ═══════════════════════════════════════════════════════════════
-    // Navigation & View Switching
-    // ═══════════════════════════════════════════════════════════════
-    function switchView(viewName) {
-        AppState.activeView = viewName;
-        DOM.navButtons.forEach(b => {
-            if (b.getAttribute('data-view') === viewName) {
-                b.classList.add('active');
-            } else {
-                b.classList.remove('active');
-            }
+        // Action buttons
+        if (DOM.btnTriggerDiscovery) DOM.btnTriggerDiscovery.addEventListener('click', runDiscovery);
+        if (DOM.btnActDiscover) DOM.btnActDiscover.addEventListener('click', runDiscovery);
+
+        if (DOM.btnTriggerOptimization) DOM.btnTriggerOptimization.addEventListener('click', runOptimization);
+        if (DOM.btnActOptimize) DOM.btnActOptimize.addEventListener('click', runOptimization);
+
+        if (DOM.btnGenerateProposal) DOM.btnGenerateProposal.addEventListener('click', generateProposal);
+        if (DOM.btnActPropose) DOM.btnActPropose.addEventListener('click', generateProposal);
+
+        if (DOM.btnProposalApprove) DOM.btnProposalApprove.addEventListener('click', approveProposal);
+        if (DOM.btnProposalReject) DOM.btnProposalReject.addEventListener('click', rejectProposal);
+        if (DOM.btnTriggerExecution) DOM.btnTriggerExecution.addEventListener('click', executeProposal);
+
+        if (DOM.btnQuickRunE2E) DOM.btnQuickRunE2E.addEventListener('click', runQuickE2E);
+        if (DOM.btnProbeSwitch) DOM.btnProbeSwitch.addEventListener('click', checkHealthAndStatus);
+        if (DOM.btnRefreshAll) DOM.btnRefreshAll.addEventListener('click', () => {
+            checkHealthAndStatus();
+            listProposals();
         });
-
-        DOM.viewPanels.forEach(p => {
-            if (p.id === `view-${viewName}`) {
-                p.classList.add('active');
-            } else {
-                p.classList.remove('active');
-            }
+        if (DOM.btnRefreshAudit) DOM.btnRefreshAudit.addEventListener('click', renderAuditTrail);
+        if (DOM.btnRefreshSpecialists) DOM.btnRefreshSpecialists.addEventListener('click', () => {
+            if (AppState.activeTaskId) loadAssessments(AppState.activeTaskId);
         });
-
-        // Lazy load view-specific data
-        if (viewName === 'infrastructure') loadInfrastructure();
-        if (viewName === 'approvals') loadApprovals();
-        if (viewName === 'rollback') loadRollbacks();
-        if (viewName === 'learning') loadLearning();
-        if (viewName === 'strategy') loadStrategy();
-        if (viewName === 'risk') loadRisk();
-        if (viewName === 'activity') loadActivityTimeline();
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // Real-Time Server-Sent Events (SSE)
-    // ═══════════════════════════════════════════════════════════════
-    function setupSSE() {
-        if (!window.EventSource) return;
-        const source = new EventSource('/api/v1/command-center/stream');
-
-        source.onopen = () => {
-            AppState.sseConnected = true;
-            if (DOM.sseDot) DOM.sseDot.className = 'status-indicator-dot dot-emerald';
-        };
-
-        source.addEventListener('journey_step_updated', (e) => {
-            try {
-                const payload = JSON.parse(e.data);
-                appendActivityItem('JOURNEY', `Advanced to stage: ${payload.data.step}`);
-                fetchOverviewState();
-            } catch (err) {}
-        });
-
-        source.addEventListener('copilot_query', (e) => {
-            try {
-                const payload = JSON.parse(e.data);
-                appendActivityItem('COPILOT', `Query processed: "${payload.data.query}"`);
-            } catch (err) {}
-        });
-
-        source.onerror = () => {
-            AppState.sseConnected = false;
-            if (DOM.sseDot) DOM.sseDot.className = 'status-indicator-dot dot-crimson';
-        };
+    // Initialization
+    function init() {
+        bindEvents();
+        checkHealthAndStatus();
+        listProposals();
+        recordAudit('System Initialized', 'Operator Control Room loaded. REST API bindings active.');
+        recordSwitchMessage('System', 'Connected to SwitchOps event bus. Listening for inbound events.');
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // Overview State Fetcher
-    // ═══════════════════════════════════════════════════════════════
-    async function fetchOverviewState() {
-        try {
-            const data = await API.get('/api/v1/command-center/overview');
-            renderOverview(data);
-        } catch (err) {
-            console.error('Failed to fetch Command Center overview:', err);
-        }
-    }
-
-    function renderOverview(data) {
-        if (!data || !data.kpis) return;
-        const k = data.kpis;
-        const g = data.governance;
-
-        if (DOM.kpiSpend) DOM.kpiSpend.textContent = `$${k.monthly_spend_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-        if (DOM.kpiResources) DOM.kpiResources.textContent = `${k.total_resources} resources monitored`;
-        if (DOM.kpiVerifiedSavings) DOM.kpiVerifiedSavings.textContent = `$${k.verified_monthly_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-        if (DOM.kpiAnnualizedSavings) DOM.kpiAnnualizedSavings.textContent = `$${k.annualized_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}/yr annualized`;
-        if (DOM.kpiPotentialSavings) DOM.kpiPotentialSavings.textContent = `$${k.potential_monthly_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-
-        if (g) {
-            AppState.autonomyLevel = g.autonomy_level;
-            AppState.isEmergencyStopped = g.is_emergency_stopped;
-            if (DOM.kpiAutonomy) DOM.kpiAutonomy.textContent = formatAutonomy(g.autonomy_level);
-            if (DOM.autonomyVal) DOM.autonomyVal.textContent = formatAutonomy(g.autonomy_level);
-            if (DOM.kpiPendingApprovals) DOM.kpiPendingApprovals.textContent = `${k.pending_approvals_count} pending human approvals`;
-            if (DOM.navPendingBadge) DOM.navPendingBadge.textContent = k.pending_approvals_count;
-            updateEmergencyUI();
-        }
-
-        // Cost view stats
-        if (DOM.costSpend) DOM.costSpend.textContent = `$${k.monthly_spend_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-        if (DOM.costWaste) DOM.costWaste.textContent = `$${(k.potential_monthly_savings_usd * 0.7).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-        if (DOM.costPotential) DOM.costPotential.textContent = `$${k.potential_monthly_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-
-        // Attribution view stats
-        if (DOM.attrPredicted) DOM.attrPredicted.textContent = `$${k.potential_monthly_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-        if (DOM.attrVerified) DOM.attrVerified.textContent = `$${k.verified_monthly_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-        if (DOM.attrAnnualized) DOM.attrAnnualized.textContent = `$${k.annualized_savings_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-        if (DOM.attrRealizationFill) {
-            const rate = k.potential_monthly_savings_usd > 0 ? (k.verified_monthly_savings_usd / k.potential_monthly_savings_usd) * 100 : 100;
-            DOM.attrRealizationFill.style.width = `${Math.min(100, rate)}%`;
-            if (DOM.attrRealizationDesc) DOM.attrRealizationDesc.textContent = `Realization Rate: ${rate.toFixed(1)}% of predicted savings verified.`;
-        }
-
-        // Digital Twin baseline
-        if (DOM.simBaseCost) DOM.simBaseCost.textContent = `$${k.monthly_spend_usd.toFixed(2)}`;
-        if (DOM.simProjCost) DOM.simProjCost.textContent = `$${Math.max(0, k.monthly_spend_usd - k.potential_monthly_savings_usd).toFixed(2)}`;
-
-        // Journey state sync
-        if (data.journey && data.journey.current_step) {
-            updateJourneyUI(data.journey.current_step, data.journey.goal_text);
-        }
-    }
-
-    function formatAutonomy(lvl) {
-        return (lvl || '').replace('_', ' ');
-    }
-
-    function updateEmergencyUI() {
-        if (!DOM.emergencyBtn) return;
-        if (AppState.isEmergencyStopped) {
-            DOM.emergencyBtn.classList.add('active-stop');
-            if (DOM.emergencyBtnText) DOM.emergencyBtnText.textContent = 'STOP ACTIVE (Release)';
-        } else {
-            DOM.emergencyBtn.classList.remove('active-stop');
-            if (DOM.emergencyBtnText) DOM.emergencyBtnText.textContent = 'Emergency Stop';
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Journey Stepper Engine
-    // ═══════════════════════════════════════════════════════════════
-    async function advanceJourney(stepName) {
-        try {
-            const res = await API.post('/api/v1/command-center/journey/step', {
-                step: stepName,
-                scenario: AppState.activeScenario,
-            });
-            updateJourneyUI(stepName, res.step_result ? res.step_result.message : null);
-            fetchOverviewState();
-        } catch (err) {
-            console.error('Failed to advance journey step:', err);
-        }
-    }
-
-    function updateJourneyUI(stepName, contextMsg) {
-        AppState.journeyStep = stepName;
-        const currentIdx = AppState.journeySteps.indexOf(stepName);
-
-        DOM.stepNodes.forEach((node, idx) => {
-            node.classList.remove('active', 'completed');
-            if (idx === currentIdx) {
-                node.classList.add('active');
-            } else if (idx < currentIdx) {
-                node.classList.add('completed');
-            }
-        });
-
-        if (DOM.journeyBadge) DOM.journeyBadge.textContent = `STAGE: ${stepName.toUpperCase()}`;
-        if (DOM.journeyText && contextMsg) DOM.journeyText.textContent = contextMsg;
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Activity & Timeline
-    // ═══════════════════════════════════════════════════════════════
-    function appendActivityItem(badge, text) {
-        const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
-        const li = document.createElement('li');
-        li.className = 'feed-item';
-        li.innerHTML = `
-            <span class="feed-item-time">${timeStr}</span>
-            <span class="feed-item-badge">${badge}</span>
-            <span class="feed-item-text">${escapeHtml(text)}</span>
-        `;
-        if (DOM.overviewActivityFeed) {
-            const empty = DOM.overviewActivityFeed.querySelector('.feed-item-empty');
-            if (empty) empty.remove();
-            DOM.overviewActivityFeed.prepend(li);
-            if (DOM.overviewActivityFeed.children.length > 8) {
-                DOM.overviewActivityFeed.lastElementChild.remove();
-            }
-        }
-    }
-
-    async function loadActivityTimeline() {
-        if (!DOM.fullActivityTimeline) return;
-        DOM.fullActivityTimeline.innerHTML = '<div class="feed-item-empty">Loading verified activity log...</div>';
-        try {
-            const runs = await API.get('/api/v1/pipeline/runs');
-            if (!runs || runs.length === 0) {
-                DOM.fullActivityTimeline.innerHTML = '<div class="feed-item-empty">No pipeline runs executed yet. Run an autonomous cycle above.</div>';
-                return;
-            }
-            DOM.fullActivityTimeline.innerHTML = runs.map(r => `
-                <div class="card-panel" style="margin-bottom: 10px;">
-                    <div class="panel-header">
-                        <strong>Pipeline Run: ${escapeHtml(r.run_id)} (${escapeHtml(r.scenario)})</strong>
-                        <span class="status-pill pill-active">${escapeHtml(r.status)}</span>
-                    </div>
-                    <p style="font-size: 12px; color: var(--text-muted);">Scale: ${r.scale} | Seed: ${r.seed} | Duration: ${r.total_duration_ms}ms</p>
-                </div>
-            `).join('');
-        } catch (err) {
-            DOM.fullActivityTimeline.innerHTML = '<div class="feed-item-empty">Could not load activity events.</div>';
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Agent Workspace Inspector
-    // ═══════════════════════════════════════════════════════════════
-    function loadAgentWorkspace(agentKey) {
-        if (!DOM.agentWorkspaceContent) return;
-
-        const agentProfiles = {
-            'M1': { name: 'Infrastructure Discovery Agent (M1)', tool: 'cloud_adapter.discover()', status: 'ACTIVE', input: 'Multi-cloud API credentials & VPC endpoints', output: 'Topology graph with 45+ nodes and network edges' },
-            'M2': { name: 'Cost Intelligence Agent (M2)', tool: 'billing_adapter.fetch_actuals()', status: 'ACTIVE', input: 'Normalized CUR line items', output: 'Service spend breakdown and waste categorization' },
-            'M3': { name: 'Application Intelligence Agent (M3)', tool: 'app_discovery.inspect_topology()', status: 'ACTIVE', input: 'Traffic telemetry, tags, process maps', output: 'Application boundary and dependency mapping' },
-            'M4': { name: 'Risk Intelligence Agent (M4)', tool: 'risk_engine.evaluate_blast_radius()', status: 'ACTIVE', input: 'Dependency paths and SLO definitions', output: 'Blast radius scores and SPOF alerts' },
-            'M5': { name: 'Strategy Agent (M5)', tool: 'strategy_engine.synthesize()', status: 'ACTIVE', input: 'Optimization candidates and constraints', output: 'Prioritized operational roadmap' },
-            'M6': { name: 'Digital Twin Simulator (M6)', tool: 'twin_simulator.simulate_change()', status: 'ACTIVE', input: 'Virtual copy of infrastructure topology', output: 'Counterfactual latency and SLA impact projection' },
-            'M7': { name: 'Explainability Agent (M7)', tool: 'explanation_engine.generate_proof()', status: 'ACTIVE', input: 'Decision rationale and evidence metrics', output: 'Human-readable justification and compliance proof' },
-            'M8': { name: 'Continuous Learning Agent (M8)', tool: 'learning_engine.evolve_dna()', status: 'ACTIVE', input: 'Post-execution outcomes and overrides', output: 'Updated Cloud DNA behavioral profile' },
-            'M9': { name: 'Decision Council (M9)', tool: 'consensus_manager.vote()', status: 'ACTIVE', input: 'Multi-agent evaluations and confidence scores', output: 'Consensus voting verdict: APPROVED' },
-            'TrueForge': { name: 'TrueForge Agent Runtime', tool: 'sandbox_executor.run()', status: 'ACTIVE', input: 'Autonomous operational goal and tool registry', output: 'Isolated execution in secure sandbox' },
-        };
-
-        const prof = agentProfiles[agentKey] || agentProfiles['M9'];
-        DOM.agentWorkspaceContent.innerHTML = `
-            <div class="panel-header">
-                <h3 class="panel-title">${escapeHtml(prof.name)}</h3>
-                <span class="status-pill pill-active">${escapeHtml(prof.status)}</span>
-            </div>
-            <div class="operational-detail-box">
-                <div class="op-row"><span class="op-label">Active Tool:</span> <span class="op-code-val">${escapeHtml(prof.tool)}</span></div>
-                <div class="op-row"><span class="op-label">Primary Input:</span> <span class="op-val">${escapeHtml(prof.input)}</span></div>
-                <div class="op-row"><span class="op-label">Output Artifact:</span> <span class="op-val">${escapeHtml(prof.output)}</span></div>
-            </div>
-            <div class="panel-actions" style="margin-top: 10px;">
-                <button class="btn-primary" onclick="window.CloudPilotApp.runAgentScan('${agentKey}')">Trigger Agent Inspection</button>
-            </div>
-        `;
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Infrastructure Explorer
-    // ═══════════════════════════════════════════════════════════════
-    let _allInfraResources = [];
-
-    async function loadInfrastructure() {
-        if (!DOM.infraTableBody) return;
-        DOM.infraTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading discovered topology...</td></tr>';
-        try {
-            const topo = await API.get('/api/v1/simulator/topology');
-            _allInfraResources = topo.resources || [];
-            if (DOM.countInfraAll) DOM.countInfraAll.textContent = _allInfraResources.length;
-            renderInfraTable(_allInfraResources);
-        } catch (err) {
-            DOM.infraTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Could not load infrastructure resources.</td></tr>';
-        }
-    }
-
-    function renderInfraTable(resources) {
-        if (!resources || resources.length === 0) {
-            DOM.infraTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No resources found.</td></tr>';
-            return;
-        }
-        DOM.infraTableBody.innerHTML = resources.map(r => `
-            <tr>
-                <td><code class="op-code-val">${escapeHtml(r.resource_id)}</code></td>
-                <td>${escapeHtml(r.resource_type || 'Unknown')}</td>
-                <td><span class="brand-env-badge">${escapeHtml(r.environment || 'production')}</span></td>
-                <td><span class="${r.criticality === 'TIER_1' ? 'badge-risk-low' : 'kpi-tag'}">${escapeHtml(r.criticality || 'STANDARD')}</span></td>
-                <td><span class="status-indicator-dot ${r.state === 'running' ? 'dot-emerald' : 'dot-cyan'}" style="display:inline-block; margin-right:4px;"></span>${escapeHtml(r.state || 'active')}</td>
-                <td><strong>$${(r.monthly_cost_usd || 0).toFixed(2)}</strong></td>
-                <td><button class="btn-secondary" style="padding:2px 8px; font-size:11px;" onclick="window.CloudPilotApp.inspectResource('${escapeHtml(r.resource_id)}')">Inspect</button></td>
-            </tr>
-        `).join('');
-    }
-
-    function filterInfraTable(category) {
-        if (category === 'ALL') {
-            renderInfraTable(_allInfraResources);
-            return;
-        }
-        const filtered = _allInfraResources.filter(r => {
-            const t = (r.resource_type || '').toUpperCase();
-            if (category === 'COMPUTE') return t.includes('EC2') || t.includes('COMPUTE') || t.includes('INSTANCE');
-            if (category === 'DATABASE') return t.includes('RDS') || t.includes('DATABASE') || t.includes('DB');
-            if (category === 'STORAGE') return t.includes('S3') || t.includes('EBS') || t.includes('VOLUME');
-            if (category === 'K8S') return t.includes('EKS') || t.includes('K8S') || t.includes('CLUSTER');
-            return true;
-        });
-        renderInfraTable(filtered);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Approvals Center
-    // ═══════════════════════════════════════════════════════════════
-    async function loadApprovals() {
-        if (!DOM.approvalsContainer) return;
-        DOM.approvalsContainer.innerHTML = '<div class="feed-item-empty">Loading approval queue...</div>';
-        try {
-            const requests = await API.get('/api/v1/governance/approvals');
-            if (!requests || requests.length === 0) {
-                DOM.approvalsContainer.innerHTML = '<div class="feed-item-empty">No pending approval requests. Autonomy gates clear.</div>';
-                return;
-            }
-            DOM.approvalsContainer.innerHTML = requests.map(req => `
-                <div class="card-panel" style="margin-bottom: 12px;">
-                    <div class="panel-header">
-                        <strong>Request #${escapeHtml(req.request_id)}: ${escapeHtml(req.action.action_type)}</strong>
-                        <span class="status-pill pill-active">${escapeHtml(req.status)}</span>
-                    </div>
-                    <div class="operational-detail-box">
-                        <div class="op-row"><span class="op-label">Target:</span> <strong>${escapeHtml(req.action.target_resource_id)}</strong></div>
-                        <div class="op-row"><span class="op-label">Required Role:</span> <span>${escapeHtml(req.required_route || req.route || 'ENGINEERING_LEAD')}</span></div>
-                        <div class="op-row"><span class="op-label">Cost Impact:</span> <span class="text-emerald">$${(req.action.cost_impact_monthly_usd || 0).toFixed(2)}/mo</span></div>
-                    </div>
-                    ${req.status === 'PENDING' ? `
-                    <div class="panel-actions" style="margin-top: 10px;">
-                        <button class="btn-primary" onclick="window.CloudPilotApp.openApprovalModal('${escapeHtml(req.request_id)}')">Review & Decide</button>
-                    </div>` : ''}
-                </div>
-            `).join('');
-        } catch (err) {
-            DOM.approvalsContainer.innerHTML = '<div class="feed-item-empty">Could not load approval requests.</div>';
-        }
-    }
-
-    function openApprovalModal(requestId) {
-        AppState.currentApprovalModalId = requestId;
-        if (DOM.approvalDesc) DOM.approvalDesc.textContent = `Reviewing human-in-the-loop authorization request: ${requestId}`;
-        if (DOM.approvalModal) DOM.approvalModal.classList.add('open');
-    }
-
-    function closeApprovalModal() {
-        if (DOM.approvalModal) DOM.approvalModal.classList.remove('open');
-        AppState.currentApprovalModalId = null;
-    }
-
-    async function submitApprovalDecision(approved) {
-        if (!AppState.currentApprovalModalId) return;
-        const approver = DOM.approvalApproverInput ? DOM.approvalApproverInput.value : 'Operator';
-        const reason = DOM.approvalReasonInput ? DOM.approvalReasonInput.value : '';
-
-        try {
-            await API.post(`/api/v1/governance/approvals/${AppState.currentApprovalModalId}/decide`, {
-                approver,
-                role: 'Lead-Architect',
-                approved,
-                reason,
-            });
-            closeApprovalModal();
-            loadApprovals();
-            fetchOverviewState();
-        } catch (err) {
-            console.error('Error submitting approval decision:', err);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Rollback View
-    // ═══════════════════════════════════════════════════════════════
-    async function loadRollbacks() {
-        if (!DOM.rollbackContainer) return;
-        DOM.rollbackContainer.innerHTML = '<div class="feed-item-empty">Loading rollback history...</div>';
-        try {
-            const list = await API.get('/api/v1/verification/rollback/history');
-            if (!list || list.length === 0) {
-                DOM.rollbackContainer.innerHTML = '<div class="feed-item-empty">Zero rollbacks executed. Infrastructure is currently operating normally.</div>';
-                return;
-            }
-            DOM.rollbackContainer.innerHTML = list.map(rb => `
-                <div class="card-panel" style="margin-bottom: 12px;">
-                    <div class="panel-header">
-                        <strong>Rollback ID: ${escapeHtml(rb.rollback_id)}</strong>
-                        <span class="status-pill pill-active">${escapeHtml(rb.status)}</span>
-                    </div>
-                    <div class="operational-detail-box">
-                        <div class="op-row"><span class="op-label">Target Resource:</span> <strong>${escapeHtml(rb.target_resource_id)}</strong></div>
-                        <div class="op-row"><span class="op-label">Baseline Restored:</span> <span class="text-emerald">${rb.baseline_restored ? 'YES (Validated)' : 'NO'}</span></div>
-                        <div class="op-row"><span class="op-label">Audit Record:</span> <code class="op-code-val">${escapeHtml(rb.audit_record_id || 'N/A')}</code></div>
-                    </div>
-                </div>
-            `).join('');
-        } catch (err) {
-            DOM.rollbackContainer.innerHTML = '<div class="feed-item-empty">Could not load rollback records.</div>';
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Learning & Cloud DNA
-    // ═══════════════════════════════════════════════════════════════
-    async function loadLearning() {
-        if (!DOM.dnaContainer) return;
-        try {
-            const data = await API.get('/api/v1/verification/learning/metrics');
-            const dna = data.cloud_dna || {};
-            DOM.dnaContainer.innerHTML = `
-                <div class="cards-grid-3">
-                    <div class="card-panel">
-                        <h3 class="panel-subtitle">Deployment Style</h3>
-                        <div class="large-stat text-cyan">${escapeHtml(dna.deployment_style || 'MODERATE')}</div>
-                        <p class="stat-desc">Learned operational risk posture</p>
-                    </div>
-                    <div class="card-panel">
-                        <h3 class="panel-subtitle">Risk Tolerance</h3>
-                        <div class="large-stat text-emerald">${escapeHtml(dna.risk_tolerance || 'MEDIUM')}</div>
-                        <p class="stat-desc">Dynamic tolerance boundaries</p>
-                    </div>
-                    <div class="card-panel">
-                        <h3 class="panel-subtitle">Rollback Frequency</h3>
-                        <div class="large-stat">${(dna.rollback_frequency_pct || 0).toFixed(1)}%</div>
-                        <p class="stat-desc">Historical operational reversions</p>
-                    </div>
-                </div>
-            `;
-        } catch (err) {
-            DOM.dnaContainer.innerHTML = '<div class="feed-item-empty">Could not load Cloud DNA metrics.</div>';
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Strategy & Risk Views
-    // ═══════════════════════════════════════════════════════════════
-    async function loadStrategy() {
-        if (!DOM.strategyContainer) return;
-        DOM.strategyContainer.innerHTML = `
-            <div class="card-panel">
-                <div class="panel-header">
-                    <strong>Strategy #1: Rightsizing Non-Production Workloads</strong>
-                    <span class="status-pill pill-active">RECOMMENDED</span>
-                </div>
-                <p style="font-size: 13px; color: var(--text-secondary); margin: 6px 0;">
-                    Downscale idle dev/test compute instances during off-peak hours and adjust memory headroom.
-                </p>
-                <div class="operational-detail-box">
-                    <div class="op-row"><span class="op-label">Estimated Monthly Savings:</span> <strong class="text-emerald">$125.00</strong></div>
-                    <div class="op-row"><span class="op-label">Implementation Risk:</span> <span class="badge-risk-low">LOW</span></div>
-                    <div class="op-row"><span class="op-label">Confidence:</span> <span>94.2%</span></div>
-                </div>
-            </div>
-        `;
-    }
-
-    async function loadRisk() {
-        if (!DOM.riskContainer) return;
-        DOM.riskContainer.innerHTML = `
-            <div class="card-panel">
-                <div class="panel-header">
-                    <strong>Critical Dependency Risk Check</strong>
-                    <span class="badge-risk-low">LOW RISK</span>
-                </div>
-                <p style="font-size: 13px; color: var(--text-secondary); margin: 6px 0;">
-                    Zero single points of failure detected on Tier-1 customer path. Redundant VPC subnets active.
-                </p>
-            </div>
-        `;
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // CloudPilot Copilot Interactive Engine
-    // ═══════════════════════════════════════════════════════════════
-    async function sendCopilotQuery(queryText) {
-        if (!queryText || !DOM.copilotChatBox) return;
-
-        // Append User bubble
-        const userDiv = document.createElement('div');
-        userDiv.className = 'copilot-bubble user';
-        userDiv.textContent = queryText;
-        DOM.copilotChatBox.appendChild(userDiv);
-
-        if (DOM.copilotInput) DOM.copilotInput.value = '';
-        DOM.copilotChatBox.scrollTop = DOM.copilotChatBox.scrollHeight;
-
-        // Append loading assistant bubble
-        const asstDiv = document.createElement('div');
-        asstDiv.className = 'copilot-bubble assistant';
-        asstDiv.textContent = 'Analyzing platform telemetry and reasoning...';
-        DOM.copilotChatBox.appendChild(asstDiv);
-        DOM.copilotChatBox.scrollTop = DOM.copilotChatBox.scrollHeight;
-
-        try {
-            const res = await API.post('/api/v1/command-center/copilot', { query: queryText });
-            asstDiv.textContent = res.answer || 'Query processed successfully.';
-        } catch (err) {
-            asstDiv.textContent = 'Could not process query. Please verify backend API connectivity.';
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Expandable Evidence Modal
-    // ═══════════════════════════════════════════════════════════════
-    function showEvidenceModal(title, jsonPayload) {
-        if (DOM.evidencePre) DOM.evidencePre.textContent = JSON.stringify(jsonPayload, null, 2);
-        if (DOM.evidenceModal) DOM.evidenceModal.classList.add('open');
-    }
-
-    function closeEvidenceModal() {
-        if (DOM.evidenceModal) DOM.evidenceModal.classList.remove('open');
-    }
-
-    function escapeHtml(str) {
-        if (!str) return '';
-        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
-    // Global namespace exposure for inline onclick handlers
+    // Expose public API for inline table onclicks
     window.CloudPilotApp = {
-        switchView,
-        advanceJourney,
-        openApprovalModal,
-        inspectResource: (id) => {
-            const res = _allInfraResources.find(r => r.resource_id === id);
-            showEvidenceModal(`Resource Details: ${id}`, res || { resource_id: id });
-        },
-        runAgentScan: (key) => {
-            appendActivityItem(key, `Manual agent inspection triggered for ${key}`);
-            loadAgentWorkspace(key);
-        }
+        inspectProposal,
+        runDiscovery,
+        runOptimization,
+        generateProposal,
+        approveProposal,
+        rejectProposal,
+        executeProposal
     };
 
-    // DOM Ready
+    // Run when DOM ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {

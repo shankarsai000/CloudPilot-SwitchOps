@@ -3,13 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="CloudPilot AI Enterprise Command Center - Autonomous Cloud Reasoning, Verification, and Safety Control Plane">
-    <title>CloudPilot AI — Enterprise Command Center</title>
-    <!-- Modern typography: Inter and Outfit -->
+    <meta name="description" content="CloudPilot SwitchOps — Unified Autonomous Cloud Operations Control Room for Switch AI">
+    <title>CloudPilot SwitchOps — Operator Control Room</title>
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .badge-z3-sat { background-color: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid #10b981; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; }
+        .badge-z3-unsat { background-color: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; }
+        .badge-z3-unknown { background-color: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; }
+        .hash-code { font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan); background: rgba(6, 182, 212, 0.1); padding: 2px 6px; border-radius: 4px; word-break: break-all; }
+        .audit-item { border-left: 2px solid var(--accent-indigo); padding-left: 12px; margin-bottom: 12px; }
+        .audit-item.success { border-left-color: var(--accent-emerald); }
+        .audit-item.failed { border-left-color: var(--accent-crimson); }
+        .pill-tag { display: inline-block; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--bg-surface-highlight); color: var(--text-secondary); margin-right: 4px; }
+        .step-active-card { border: 1px solid var(--accent-indigo) !important; box-shadow: 0 0 12px rgba(99, 102, 241, 0.2); }
+        .quick-action-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; background: var(--bg-surface); padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); }
+    </style>
 </head>
 <body class="command-center-app">
 
@@ -25,686 +37,656 @@
                     </svg>
                 </div>
                 <div class="brand-info">
-                    <span class="brand-name">CloudPilot AI</span>
-                    <span class="brand-env-badge" id="header-scenario-badge">SaaS Enterprise</span>
+                    <span class="brand-name">CloudPilot SwitchOps</span>
+                    <span class="brand-env-badge" id="header-version-badge">v4.3.0 Submission Ready</span>
                 </div>
             </div>
 
-            <!-- Scenario Selector -->
-            <div class="scenario-selector-group">
-                <label for="scenario-dropdown" class="sr-only">Enterprise Scenario</label>
-                <select id="scenario-dropdown" class="scenario-select" title="Switch Digital Enterprise Scenario">
-                    <option value="SaaS" selected>Scenario: SaaS Multi-Tenant</option>
-                    <option value="Banking">Scenario: Banking Core</option>
-                    <option value="Ecommerce">Scenario: Global E-Commerce</option>
-                    <option value="AI Research">Scenario: AI Research Lab</option>
-                    <option value="Startup">Scenario: High-Growth Startup</option>
-                    <option value="Healthcare">Scenario: Healthcare HIPAA</option>
-                    <option value="Gaming">Scenario: Multiplayer Gaming</option>
+            <!-- Workspace Context Selection -->
+            <div style="display: flex; align-items: center; gap: 8px; margin-left: 16px;">
+                <label for="workspace-input" style="font-size: 12px; color: var(--text-secondary);">Workspace:</label>
+                <input id="workspace-input" type="text" value="samples/staging" style="background: var(--bg-surface-elevated); border: 1px solid var(--border-strong); color: var(--text-primary); padding: 4px 8px; border-radius: 4px; font-size: 12px; width: 160px;" title="Workspace Root Directory" />
+            </div>
+
+            <!-- Operator Identity Role Selector -->
+            <div style="display: flex; align-items: center; gap: 8px; margin-left: 12px;">
+                <label for="role-select" style="font-size: 12px; color: var(--text-secondary);">Operator:</label>
+                <select id="role-select" style="background: var(--bg-surface-elevated); border: 1px solid var(--border-strong); color: var(--text-primary); padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                    <option value="lead-platform:PLATFORM_LEAD">Sarah Connor (lead-platform - PLATFORM_LEAD)</option>
+                    <option value="sec-lead:SECURITY_LEAD">Alex Vance (sec-lead - SECURITY_LEAD)</option>
+                    <option value="finops-lead:FINOPS_LEAD">Marcus Brody (finops-lead - FINOPS_LEAD)</option>
+                    <option value="guest-viewer:VIEWER">Guest Observer (guest-viewer - VIEWER / Read-Only)</option>
                 </select>
             </div>
         </div>
 
         <div class="header-right">
-            <!-- Autonomy Level Status -->
-            <div class="header-status-item" id="autonomy-status-badge" title="Current Autonomy Level">
-                <span class="status-indicator-dot dot-cyan"></span>
-                <span class="status-label">Autonomy:</span>
-                <span class="status-val" id="header-autonomy-val">L4 Limited</span>
+            <!-- Switch Wire Protocol Status -->
+            <div class="header-status-item" id="switch-status-badge" title="Live Switch Agent Bridge Wire Protocol State">
+                <span class="status-indicator-dot dot-emerald" id="switch-status-dot"></span>
+                <span class="status-label">Switch Bridge:</span>
+                <span class="status-val" id="switch-status-val">Checking...</span>
             </div>
 
-            <!-- Live SSE Stream Indicator -->
-            <div class="header-status-item" id="sse-status-badge" title="Real-Time Event Stream">
-                <span class="status-indicator-dot dot-emerald" id="sse-dot"></span>
-                <span class="status-label">Live Stream</span>
+            <!-- Backend Readiness -->
+            <div class="header-status-item" id="backend-status-badge" title="FastAPI Engine Health">
+                <span class="status-indicator-dot dot-emerald" id="backend-status-dot"></span>
+                <span class="status-label">Engine:</span>
+                <span class="status-val" id="backend-status-val">READY</span>
             </div>
 
-            <!-- Emergency Stop (Kill Switch) -->
-            <button id="emergency-stop-btn" class="btn-emergency-stop" title="Trigger Instant Emergency Stop for all operations">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-                <span id="emergency-btn-text">Emergency Stop</span>
-            </button>
-
-            <!-- Copilot Toggle -->
-            <button id="copilot-toggle-btn" class="btn-copilot-trigger" title="Open CloudPilot AI Copilot">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                </svg>
-                <span>Copilot</span>
+            <!-- Quick Run Full Workflow Button -->
+            <button id="btn-quick-run-e2e" class="btn-journey-auto" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" title="Run full autonomous cycle up to human proposal review">
+                ▶ Run Assessment & Decision
             </button>
         </div>
     </header>
 
-    <!-- Primary User Journey Stepper: Goal -> Analyze -> Plan -> Simulate -> Approval -> Execute -> Monitor -> Verify -->
-    <section class="journey-stepper-bar" aria-label="Primary Autonomous Operations Journey">
+    <!-- Autonomous Operational Stepper Bar -->
+    <section class="journey-stepper-bar" aria-label="End-to-End Governance Journey">
         <div class="journey-header">
-            <span class="journey-title">AUTONOMOUS OPERATIONS JOURNEY</span>
+            <span class="journey-title">GOVERNANCE & BOUNDED EXECUTION JOURNEY</span>
             <div class="journey-controls">
-                <button id="journey-run-next-btn" class="btn-journey-action">Advance Next Step</button>
-                <button id="journey-run-all-btn" class="btn-journey-auto">Run Full Autonomous Cycle</button>
+                <span style="font-size: 11px; color: var(--text-muted); margin-right: 8px;">OBSERVE → ANALYZE → OPTIMIZE → PROPOSE → APPROVE → EXECUTE → VERIFY → AUDIT</span>
             </div>
         </div>
-
         <nav class="stepper-track" aria-label="Journey Stages">
-            <button class="step-node active" data-step="Goal" id="step-node-goal">
-                <span class="step-num">1</span>
-                <span class="step-text">Goal</span>
+            <button class="step-node active" data-view="overview" id="step-btn-overview">
+                <span class="step-num">0</span>
+                <span class="step-text">Cockpit</span>
             </button>
             <div class="step-arrow">→</div>
-            <button class="step-node" data-step="Analyze" id="step-node-analyze">
-                <span class="step-num">2</span>
-                <span class="step-text">Analyze</span>
+            <button class="step-node" data-view="infrastructure" id="step-btn-infra">
+                <span class="step-num">A</span>
+                <span class="step-text">Discovery</span>
             </button>
             <div class="step-arrow">→</div>
-            <button class="step-node" data-step="Plan" id="step-node-plan">
-                <span class="step-num">3</span>
-                <span class="step-text">Plan</span>
+            <button class="step-node" data-view="specialists" id="step-btn-specialists">
+                <span class="step-num">B</span>
+                <span class="step-text">Specialist Analysis</span>
             </button>
             <div class="step-arrow">→</div>
-            <button class="step-node" data-step="Simulate" id="step-node-simulate">
-                <span class="step-num">4</span>
-                <span class="step-text">Simulate</span>
+            <button class="step-node" data-view="decisions" id="step-btn-decisions">
+                <span class="step-num">C</span>
+                <span class="step-text">Decision Engine (Z3)</span>
             </button>
             <div class="step-arrow">→</div>
-            <button class="step-node" data-step="Approval" id="step-node-approval">
-                <span class="step-num">5</span>
-                <span class="step-text">Approval</span>
+            <button class="step-node" data-view="approvals" id="step-btn-approvals">
+                <span class="step-num">D</span>
+                <span class="step-text">Human Approval</span>
             </button>
             <div class="step-arrow">→</div>
-            <button class="step-node" data-step="Execute" id="step-node-execute">
-                <span class="step-num">6</span>
-                <span class="step-text">Execute</span>
+            <button class="step-node" data-view="execution" id="step-btn-execution">
+                <span class="step-num">E</span>
+                <span class="step-text">Bounded Execution</span>
             </button>
             <div class="step-arrow">→</div>
-            <button class="step-node" data-step="Monitor" id="step-node-monitor">
-                <span class="step-num">7</span>
-                <span class="step-text">Monitor</span>
+            <button class="step-node" data-view="switch-collab" id="step-btn-switch">
+                <span class="step-num">F</span>
+                <span class="step-text">Switch Collaboration</span>
             </button>
             <div class="step-arrow">→</div>
-            <button class="step-node" data-step="Verify" id="step-node-verify">
-                <span class="step-num">8</span>
-                <span class="step-text">Verify</span>
+            <button class="step-node" data-view="audit-trail" id="step-btn-audit">
+                <span class="step-num">G</span>
+                <span class="step-text">Correlated Audit</span>
             </button>
         </nav>
-
-        <!-- Current Step Context Summary -->
-        <div class="journey-context-banner" id="journey-context-banner">
-            <span class="context-pill" id="journey-current-badge">STAGE: GOAL</span>
-            <span class="context-desc" id="journey-context-text">Objective: Reduce non-critical cloud infrastructure spend by 20% while maintaining 99.99% availability.</span>
-        </div>
     </section>
 
     <!-- Main Workspace Container -->
     <div class="main-layout">
         
-        <!-- Navigation Sidebar with 15 Views -->
+        <!-- Navigation Sidebar -->
         <aside class="main-sidebar" role="navigation">
             <div class="sidebar-scroll-wrapper">
 
-                <div class="nav-section-label">OPERATIONAL COCKPIT</div>
+                <div class="nav-section-label">OPERATIONS CONTROL</div>
                 <button class="nav-btn active" data-view="overview" id="nav-overview">
                     <span class="nav-icon">📊</span>
-                    <span class="nav-title">Overview Dashboard</span>
-                </button>
-                <button class="nav-btn" data-view="activity" id="nav-activity">
-                    <span class="nav-icon">⏱️</span>
-                    <span class="nav-title">Activity Timeline</span>
-                </button>
-                <button class="nav-btn" data-view="agent-workspace" id="nav-agent-workspace">
-                    <span class="nav-icon">🧠</span>
-                    <span class="nav-title">Agent Workspace</span>
+                    <span class="nav-title">Cockpit Overview</span>
                 </button>
 
-                <div class="nav-section-label">INTELLIGENCE & TOPOLOGY</div>
+                <div class="nav-section-label">ANALYSIS & REASONING</div>
                 <button class="nav-btn" data-view="infrastructure" id="nav-infrastructure">
                     <span class="nav-icon">🌐</span>
-                    <span class="nav-title">Infrastructure Explorer</span>
+                    <span class="nav-title">Area A: Infrastructure</span>
                 </button>
-                <button class="nav-btn" data-view="cost" id="nav-cost">
-                    <span class="nav-icon">💰</span>
-                    <span class="nav-title">Cost Intelligence</span>
+                <button class="nav-btn" data-view="specialists" id="nav-specialists">
+                    <span class="nav-icon">🧠</span>
+                    <span class="nav-title">Area B: Specialists</span>
                 </button>
-                <button class="nav-btn" data-view="risk" id="nav-risk">
-                    <span class="nav-icon">🛡️</span>
-                    <span class="nav-title">Risk Explorer</span>
-                </button>
-                <button class="nav-btn" data-view="strategy" id="nav-strategy">
-                    <span class="nav-icon">📋</span>
-                    <span class="nav-title">Strategy Workspace</span>
-                </button>
-                <button class="nav-btn" data-view="digital-twin" id="nav-digital-twin">
-                    <span class="nav-icon">🧪</span>
-                    <span class="nav-title">Digital Twin</span>
+                <button class="nav-btn" data-view="decisions" id="nav-decisions">
+                    <span class="nav-icon">⚖️</span>
+                    <span class="nav-title">Area C: Decisions & Z3</span>
                 </button>
 
-                <div class="nav-section-label">GOVERNANCE & EXECUTION</div>
-                <button class="nav-btn" data-view="decision-council" id="nav-decision-council">
-                    <span class="nav-icon">⚖️</span>
-                    <span class="nav-title">Decision Council</span>
-                </button>
+                <div class="nav-section-label">GOVERNANCE & COLLAB</div>
                 <button class="nav-btn" data-view="approvals" id="nav-approvals">
                     <span class="nav-icon">✋</span>
-                    <span class="nav-title">Approval Center</span>
-                    <span class="nav-badge badge-amber" id="nav-pending-approvals-badge">0</span>
+                    <span class="nav-title">Area D: Approval Center</span>
+                    <span class="nav-badge badge-amber" id="nav-proposals-count">0</span>
                 </button>
                 <button class="nav-btn" data-view="execution" id="nav-execution">
                     <span class="nav-icon">⚡</span>
-                    <span class="nav-title">Execution Console</span>
+                    <span class="nav-title">Area E: Sandbox Execution</span>
                 </button>
-                <button class="nav-btn" data-view="rollback" id="nav-rollback">
-                    <span class="nav-icon">🔄</span>
-                    <span class="nav-title">Rollback View</span>
-                </button>
-
-                <div class="nav-section-label">ATTRIBUTION & LEARNING</div>
-                <button class="nav-btn" data-view="learning" id="nav-learning">
-                    <span class="nav-icon">🧬</span>
-                    <span class="nav-title">Learning Timeline</span>
-                </button>
-                <button class="nav-btn" data-view="attribution" id="nav-attribution">
-                    <span class="nav-icon">📈</span>
-                    <span class="nav-title">Savings Attribution</span>
-                </button>
-                <button class="nav-btn" data-view="copilot-view" id="nav-copilot-view">
+                <button class="nav-btn" data-view="switch-collab" id="nav-switch-collab">
                     <span class="nav-icon">💬</span>
-                    <span class="nav-title">CloudPilot Copilot</span>
+                    <span class="nav-title">Area F: Switch Collab</span>
+                </button>
+                <button class="nav-btn" data-view="audit-trail" id="nav-audit-trail">
+                    <span class="nav-icon">📜</span>
+                    <span class="nav-title">Area G: Correlated Audit</span>
                 </button>
 
             </div>
         </aside>
 
-        <!-- Dynamic Main Content Viewport -->
+        <!-- Dynamic Content Viewport -->
         <main class="content-viewport" role="main">
 
-            <!-- 1. OVERVIEW DASHBOARD -->
-            <section class="view-panel active" id="view-overview" aria-labelledby="heading-overview">
+            <!-- 0. COCKPIT OVERVIEW -->
+            <section class="view-panel active" id="view-overview">
                 <div class="view-header">
                     <div>
-                        <h1 class="view-title" id="heading-overview">Command Center Overview</h1>
-                        <p class="view-subtitle">Real-time status of autonomous cloud operations, spend, risks, and governance.</p>
+                        <h1 class="view-title">Autonomous Control Room Cockpit</h1>
+                        <p class="view-subtitle">High-level status of discovered infrastructure, specialist intelligence, formal verification, and approvals.</p>
                     </div>
-                    <button class="btn-refresh" id="refresh-overview-btn" title="Refresh Live State">↻ Refresh</button>
+                    <button class="btn-refresh" id="btn-refresh-all">↻ Refresh All</button>
                 </div>
 
-                <!-- Calm Executive KPI Grid -->
+                <!-- Executive KPI Grid -->
                 <div class="kpi-cards-grid">
                     <div class="kpi-card">
                         <div class="kpi-top">
-                            <span class="kpi-name">Monitored Spend</span>
-                            <span class="kpi-tag">Monthly</span>
+                            <span class="kpi-name">Discovered Resources</span>
+                            <span class="kpi-tag">AST Verified</span>
                         </div>
-                        <div class="kpi-value" id="kpi-monthly-spend">$0.00</div>
-                        <div class="kpi-footer" id="kpi-resources-count">0 resources monitored</div>
+                        <div class="kpi-value" id="kpi-resources-count">0</div>
+                        <div class="kpi-footer" id="kpi-files-count">0 configuration files scanned</div>
                     </div>
                     <div class="kpi-card highlight-green">
                         <div class="kpi-top">
-                            <span class="kpi-name">Verified Realized Savings</span>
-                            <span class="kpi-tag tag-green">Ex-Post</span>
+                            <span class="kpi-name">Estimated Waste / Savings</span>
+                            <span class="kpi-tag tag-green">FinOps Catalog</span>
                         </div>
-                        <div class="kpi-value text-emerald" id="kpi-verified-savings">$0.00</div>
-                        <div class="kpi-footer" id="kpi-annualized-savings">$0.00/yr annualized</div>
+                        <div class="kpi-value text-emerald" id="kpi-savings-amount">$0.00/mo</div>
+                        <div class="kpi-footer">Offline catalog baseline estimate</div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-top">
-                            <span class="kpi-name">Potential Savings</span>
-                            <span class="kpi-tag">Waste Target</span>
+                            <span class="kpi-name">Security & SRE Findings</span>
+                            <span class="kpi-tag">Deterministic</span>
                         </div>
-                        <div class="kpi-value text-cyan" id="kpi-potential-savings">$0.00</div>
-                        <div class="kpi-footer">Identified idle & rightsizing</div>
+                        <div class="kpi-value text-amber" id="kpi-findings-count">0</div>
+                        <div class="kpi-footer" id="kpi-findings-breakdown">0 SecOps / 0 SRE</div>
                     </div>
                     <div class="kpi-card">
                         <div class="kpi-top">
-                            <span class="kpi-name">Active Governance</span>
-                            <span class="kpi-tag">Control Plane</span>
+                            <span class="kpi-name">Formal Solvability (Z3)</span>
+                            <span class="kpi-tag">SMT Logic</span>
                         </div>
-                        <div class="kpi-value" id="kpi-autonomy-level">L4 Limited</div>
-                        <div class="kpi-footer" id="kpi-pending-approvals">0 pending human approvals</div>
+                        <div class="kpi-value text-cyan" id="kpi-z3-status">PENDING</div>
+                        <div class="kpi-footer" id="kpi-pareto-count">0 Pareto candidates</div>
                     </div>
+                </div>
+
+                <!-- Quick Action Bar -->
+                <div class="quick-action-bar">
+                    <span style="font-weight: 600; font-size: 13px; color: var(--text-primary); margin-right: 12px;">Quick Workflow:</span>
+                    <button id="btn-act-discover" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">1. Run Discovery & Assessment</button>
+                    <button id="btn-act-optimize" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">2. Run Decision Optimization</button>
+                    <button id="btn-act-propose" class="btn-secondary" style="padding: 6px 12px; font-size: 12px;">3. Generate Human Proposal</button>
+                    <span id="quick-workflow-status" style="font-size: 12px; color: var(--accent-cyan); margin-left: auto;">Ready</span>
                 </div>
 
                 <!-- Two-Column Operational Panels -->
                 <div class="dashboard-split-grid">
-                    <!-- Left: Current Agent & Active Operation -->
                     <div class="card-panel">
                         <div class="panel-header">
-                            <h2 class="panel-title">Active Reasoning & Operation</h2>
-                            <span class="status-pill pill-active" id="live-operation-status">STANDBY</span>
+                            <h2 class="panel-title">Active Workflow State</h2>
+                            <span class="status-pill pill-active" id="active-task-pill">NO ACTIVE TASK</span>
                         </div>
                         <div class="operational-detail-box">
                             <div class="op-row">
-                                <span class="op-label">Current Agent:</span>
-                                <span class="op-val" id="live-agent-name">Decision Engine (M9)</span>
+                                <span class="op-label">Active Task ID:</span>
+                                <span class="op-val" id="active-task-id">—</span>
                             </div>
                             <div class="op-row">
-                                <span class="op-label">Current Operation:</span>
-                                <span class="op-val" id="live-operation-desc">Evaluating candidate rightsizing for non-prod instances</span>
+                                <span class="op-label">Active Decision ID:</span>
+                                <span class="op-val" id="active-decision-id">—</span>
                             </div>
                             <div class="op-row">
-                                <span class="op-label">Tool Call:</span>
-                                <span class="op-code-val" id="live-tool-call">simulator_action(rightsize_instance)</span>
+                                <span class="op-label">Active Proposal ID:</span>
+                                <span class="op-val" id="active-proposal-id">—</span>
                             </div>
                             <div class="op-row">
-                                <span class="op-label">Confidence:</span>
-                                <div class="op-meter-box">
-                                    <div class="op-meter-fill" id="live-confidence-bar" style="width: 88%;"></div>
-                                </div>
-                                <span class="op-val" id="live-confidence-text">88.0%</span>
+                                <span class="op-label">Proposal SHA-256:</span>
+                                <span class="hash-code" id="active-proposal-hash">None</span>
                             </div>
                             <div class="op-row">
-                                <span class="op-label">Risk Rating:</span>
-                                <span class="badge-risk-low" id="live-risk-badge">LOW</span>
+                                <span class="op-label">Safety Boundary:</span>
+                                <span class="badge-risk-low">BOUNDED LOCAL EXECUTION ONLY (ZERO LIVE CLOUD MUTATION)</span>
                             </div>
-                        </div>
-                        <div class="panel-actions">
-                            <button class="btn-secondary" id="btn-inspect-evidence">Expand Full Evidence</button>
-                            <button class="btn-secondary" id="btn-view-agent-workspace">Open Agent Workspace</button>
                         </div>
                     </div>
 
-                    <!-- Right: Quick Activity Log Stream -->
                     <div class="card-panel">
                         <div class="panel-header">
-                            <h2 class="panel-title">Live Activity Feed</h2>
-                            <span class="panel-meta">Real-time SSE events</span>
+                            <h2 class="panel-title">Switch Collaboration Status</h2>
+                            <span class="panel-meta" id="cockpit-switch-mode">Emulated Mode</span>
                         </div>
-                        <ul class="activity-feed-compact" id="overview-activity-feed">
-                            <li class="feed-item-empty">Listening for live agent events...</li>
+                        <div class="operational-detail-box">
+                            <div class="op-row">
+                                <span class="op-label">Room ID:</span>
+                                <span class="op-val" id="cockpit-room-id">cloudpilot-ops-room</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Wire Protocol:</span>
+                                <span class="op-val">WebSocket + REST Bridge</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Readiness Classification:</span>
+                                <span class="badge-z3-sat" id="cockpit-readiness-badge">SUBMISSION READY</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Truthful Status Note:</span>
+                                <span style="font-size: 11px; color: var(--text-secondary);" id="cockpit-switch-note">Safe deterministic fallback active when external Switch bridge daemon is not running.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AREA A: INFRASTRUCTURE OVERVIEW -->
+            <section class="view-panel" id="view-infrastructure">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title">Area A: Infrastructure Discovery & Normalization</h1>
+                        <p class="view-subtitle">Deterministic AST inspection of Terraform (`python_hcl2`) and Docker Compose infrastructure files.</p>
+                    </div>
+                    <button class="btn-primary" id="btn-trigger-discovery">▶ Run Discovery (POST /api/v1/tasks)</button>
+                </div>
+
+                <div class="card-panel" style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h2 class="panel-title">Normalized Resource Inventory</h2>
+                        <span id="infra-count-badge" class="pill-tag">0 Resources</span>
+                    </div>
+                    <div style="margin-top: 12px; overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-strong); color: var(--text-secondary);">
+                                    <th style="padding: 8px;">Resource ID</th>
+                                    <th style="padding: 8px;">Type</th>
+                                    <th style="padding: 8px;">Provider</th>
+                                    <th style="padding: 8px;">Config File</th>
+                                    <th style="padding: 8px;">Properties</th>
+                                </tr>
+                            </thead>
+                            <tbody id="infra-table-body">
+                                <tr><td colspan="5" style="padding: 16px; text-align: center; color: var(--text-muted);">No infrastructure scanned yet. Click "Run Discovery" to scan workspace.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AREA B: SPECIALIST ANALYSIS -->
+            <section class="view-panel" id="view-specialists">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title">Area B: Multi-Agent Specialist Analysis</h1>
+                        <p class="view-subtitle">Independent analysis by FinOps, SecOps, and SRE specialist engines.</p>
+                    </div>
+                    <button class="btn-secondary" id="btn-refresh-specialists">↻ Refresh Specialist Reports</button>
+                </div>
+
+                <div class="kpi-cards-grid" style="margin-bottom: 16px;">
+                    <div class="card-panel">
+                        <div class="panel-header">
+                            <h3 class="panel-title">FinOps Intelligence</h3>
+                            <span class="pill-tag">Offline Catalog Estimate</span>
+                        </div>
+                        <div id="finops-findings-box" style="padding-top: 8px;">
+                            <div style="font-size: 12px; color: var(--text-secondary);">Estimated baseline: <strong id="finops-total-spend" style="color: var(--text-primary);">$0.00/mo</strong></div>
+                            <div style="font-size: 12px; color: var(--accent-emerald);">Identified savings: <strong id="finops-potential-savings">$0.00/mo</strong></div>
+                            <ul id="finops-items-list" style="margin-top: 8px; font-size: 12px; padding-left: 16px; color: var(--text-secondary);">
+                                <li>No FinOps findings recorded.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="card-panel">
+                        <div class="panel-header">
+                            <h3 class="panel-title">SecOps Posture</h3>
+                            <span class="pill-tag">Deterministic Rules</span>
+                        </div>
+                        <div id="secops-findings-box" style="padding-top: 8px;">
+                            <div style="font-size: 12px; color: var(--text-secondary);">Total security issues: <strong id="secops-issue-count" style="color: var(--accent-amber);">0</strong></div>
+                            <ul id="secops-items-list" style="margin-top: 8px; font-size: 12px; padding-left: 16px; color: var(--text-secondary);">
+                                <li>No SecOps findings recorded.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="card-panel">
+                        <div class="panel-header">
+                            <h3 class="panel-title">SRE Reliability</h3>
+                            <span class="pill-tag">Architecture Assessment</span>
+                        </div>
+                        <div id="sre-findings-box" style="padding-top: 8px;">
+                            <div style="font-size: 12px; color: var(--text-secondary);">Reliability posture: <strong id="sre-reliability-score" style="color: var(--accent-cyan);">UNKNOWN</strong></div>
+                            <ul id="sre-items-list" style="margin-top: 8px; font-size: 12px; padding-left: 16px; color: var(--text-secondary);">
+                                <li>No SRE findings recorded.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AREA C: DECISION INTELLIGENCE & Z3 -->
+            <section class="view-panel" id="view-decisions">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title">Area C: Decision Intelligence & Z3 Constraint Proving</h1>
+                        <p class="view-subtitle">4-Objective Pareto Optimization (Cost, Risk, Reliability, Effort) & Formal Z3 SMT Verification.</p>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="select-preference-profile" style="background: var(--bg-surface-elevated); border: 1px solid var(--border-strong); color: var(--text-primary); padding: 6px 8px; border-radius: 4px; font-size: 12px;">
+                            <option value="BALANCED">Profile: BALANCED</option>
+                            <option value="COST_FIRST">Profile: COST_FIRST</option>
+                            <option value="SECURITY_FIRST">Profile: SECURITY_FIRST</option>
+                            <option value="RELIABILITY_FIRST">Profile: RELIABILITY_FIRST</option>
+                        </select>
+                        <button class="btn-primary" id="btn-trigger-optimization">▶ Run Optimization (POST /api/v1/decisions)</button>
+                    </div>
+                </div>
+
+                <div class="dashboard-split-grid">
+                    <div class="card-panel">
+                        <div class="panel-header">
+                            <h2 class="panel-title">Z3 SMT Solver & Invariant Verification</h2>
+                            <span id="z3-badge-container" class="badge-z3-unknown">NOT EVALUATED</span>
+                        </div>
+                        <div class="operational-detail-box">
+                            <div class="op-row">
+                                <span class="op-label">Formal Solver:</span>
+                                <span class="op-val">Z3 Theorem Prover (SMT)</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Verification Status:</span>
+                                <span class="op-val" id="z3-detailed-status">No active decision run</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Hard Invariants Checked:</span>
+                                <span class="op-val">No Public DBs, Retain Persistent Storage, No Privileged Pods, Budget Ceiling</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Recommended Action:</span>
+                                <span class="op-val" id="decision-recommended-action" style="color: var(--accent-emerald);">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-panel">
+                        <div class="panel-header">
+                            <h2 class="panel-title">Pareto Frontier Candidates</h2>
+                            <span class="panel-meta" id="pareto-summary-meta">0 Candidates</span>
+                        </div>
+                        <div style="overflow-x: auto; max-height: 240px;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid var(--border-strong); color: var(--text-secondary);">
+                                        <th style="padding: 6px;">ID</th>
+                                        <th style="padding: 6px;">Title</th>
+                                        <th style="padding: 6px;">Cost Impact</th>
+                                        <th style="padding: 6px;">Risk</th>
+                                        <th style="padding: 6px;">Pareto Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pareto-table-body">
+                                    <tr><td colspan="5" style="text-align: center; padding: 12px; color: var(--text-muted);">Run optimization to view Pareto frontier.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AREA D: HUMAN APPROVAL CENTER -->
+            <section class="view-panel" id="view-approvals">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title">Area D: Human-in-the-Loop Approval Center</h1>
+                        <p class="view-subtitle">Review exact proposed mutations, verify SHA-256 hash integrity, and authorize or reject changes.</p>
+                    </div>
+                    <button class="btn-primary" id="btn-generate-proposal">＋ Generate Proposal from Decision</button>
+                </div>
+
+                <div class="card-panel" style="margin-bottom: 16px;">
+                    <div class="panel-header">
+                        <h2 class="panel-title">Active Change Proposal Review (14-Point Governance)</h2>
+                        <span class="status-pill" id="proposal-review-status">AWAITING PROPOSAL</span>
+                    </div>
+
+                    <div id="proposal-details-container" style="display: none; padding-top: 12px;">
+                        <div class="operational-detail-box" style="margin-bottom: 16px;">
+                            <div class="op-row">
+                                <span class="op-label">Proposal ID:</span>
+                                <strong id="prop-id-display" style="color: var(--text-primary);">—</strong>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Proposal SHA-256 Hash:</span>
+                                <span class="hash-code" id="prop-hash-display">—</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Target File:</span>
+                                <span class="op-val" id="prop-target-file">—</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Estimated Monthly Savings:</span>
+                                <span class="op-val" id="prop-savings-display" style="color: var(--accent-emerald);">$0.00/mo</span>
+                            </div>
+                        </div>
+
+                        <!-- 14-Point Review Checklist Preview -->
+                        <div style="background: var(--bg-surface-elevated); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 16px; border: 1px solid var(--border-subtle);">
+                            <h4 style="font-size: 12px; color: var(--accent-cyan); margin-bottom: 6px;">14-Point Human Review Checklist:</h4>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px; color: var(--text-secondary);">
+                                <div>✔ 1. Exact AST target path verified</div>
+                                <div>✔ 2. Pre-mutation SHA-256 recorded</div>
+                                <div>✔ 3. Zero live cloud write calls</div>
+                                <div>✔ 4. Isolated temporary sandbox used</div>
+                                <div>✔ 5. Multi-objective Pareto rank optimal</div>
+                                <div>✔ 6. Z3 SMT constraint status SAT</div>
+                                <div>✔ 7. Hard invariant: no public database</div>
+                                <div>✔ 8. Hard invariant: persistent volumes kept</div>
+                                <div>✔ 9. Hard invariant: no privileged containers</div>
+                                <div>✔ 10. Budget ceiling verified</div>
+                                <div>✔ 11. Role-based authorization enforced</div>
+                                <div>✔ 12. Syntactic verification pre-scheduled</div>
+                                <div>✔ 13. Atomic rollback snapshot staged</div>
+                                <div>✔ 14. Correlated audit record linked</div>
+                            </div>
+                        </div>
+
+                        <!-- Diff Preview Box -->
+                        <div style="margin-bottom: 16px;">
+                            <h4 style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Proposed Configuration Mutation:</h4>
+                            <pre id="proposal-diff-box" style="background: #000; color: #a6e22e; padding: 12px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; overflow-x: auto; max-height: 160px;"></pre>
+                        </div>
+
+                        <!-- Approval Actions -->
+                        <div style="display: flex; gap: 12px; align-items: center; border-top: 1px solid var(--border-subtle); padding-top: 16px;">
+                            <button id="btn-proposal-approve" class="btn-primary" style="background: var(--accent-emerald); border-color: var(--accent-emerald);">✔ Approve Change</button>
+                            <button id="btn-proposal-reject" class="btn-emergency-stop" style="background: var(--accent-crimson);">✖ Reject Proposal</button>
+                            <span id="approval-action-status" style="font-size: 12px; color: var(--text-muted); margin-left: 12px;"></span>
+                        </div>
+                    </div>
+
+                    <div id="proposal-empty-state" style="text-align: center; padding: 32px; color: var(--text-muted);">
+                        No proposal currently selected. Click "Generate Proposal from Decision" or select one below.
+                    </div>
+                </div>
+
+                <!-- Existing Proposals List -->
+                <div class="card-panel">
+                    <h3 class="panel-title" style="margin-bottom: 12px;">All Generated Proposals</h3>
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--border-strong); color: var(--text-secondary);">
+                                    <th style="padding: 6px;">Proposal ID</th>
+                                    <th style="padding: 6px;">Status</th>
+                                    <th style="padding: 6px;">Target File</th>
+                                    <th style="padding: 6px;">SHA-256 Hash</th>
+                                    <th style="padding: 6px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="proposals-table-body">
+                                <tr><td colspan="5" style="text-align: center; padding: 12px; color: var(--text-muted);">No proposals found.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AREA E: EXECUTION CENTER -->
+            <section class="view-panel" id="view-execution">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title">Area E: Bounded Sandbox Execution & Verification</h1>
+                        <p class="view-subtitle">Isolated directory mutation, AST re-parsing, syntax verification, and atomic rollback.</p>
+                    </div>
+                    <button class="btn-primary" id="btn-trigger-execution">⚡ Execute Approved Proposal</button>
+                </div>
+
+                <div class="dashboard-split-grid">
+                    <div class="card-panel">
+                        <div class="panel-header">
+                            <h2 class="panel-title">Sandbox Execution Boundary</h2>
+                            <span class="pill-tag" id="exec-state-badge">IDLE</span>
+                        </div>
+                        <div class="operational-detail-box">
+                            <div class="op-row">
+                                <span class="op-label">Execution ID:</span>
+                                <span class="op-val" id="exec-id-val">—</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Target Sandbox:</span>
+                                <span class="op-val" id="exec-sandbox-path">Isolated temporary directory</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Pre-mutation Hash:</span>
+                                <span class="hash-code" id="exec-pre-hash">—</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Post-mutation Hash:</span>
+                                <span class="hash-code" id="exec-post-hash">—</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Syntax Verification:</span>
+                                <span class="op-val" id="exec-verification-val">—</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Rollback Recovery:</span>
+                                <span class="op-val" id="exec-rollback-val">Staged (Clean)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-panel">
+                        <div class="panel-header">
+                            <h2 class="panel-title">Execution Console Output</h2>
+                            <span class="panel-meta">Deterministic AST Mutation Log</span>
+                        </div>
+                        <pre id="execution-console-log" style="background: #000; color: #38bdf8; padding: 12px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; height: 200px; overflow-y: auto;">[SYSTEM] Bounded execution engine initialized.
+[SYSTEM] Live cloud writes prohibited. Ready for human-approved proposal.</pre>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AREA F: SWITCH COLLABORATION -->
+            <section class="view-panel" id="view-switch-collab">
+                <div class="view-header">
+                    <div>
+                        <h1 class="view-title">Area F: Switch Collaboration & Room Bridge</h1>
+                        <p class="view-subtitle">Real-time collaboration interface linking CloudPilot agents to the Switch AI room.</p>
+                    </div>
+                    <button class="btn-secondary" id="btn-probe-switch">↻ Probe Switch Bridge</button>
+                </div>
+
+                <div class="dashboard-split-grid">
+                    <div class="card-panel">
+                        <div class="panel-header">
+                            <h2 class="panel-title">Connection & Protocol Telemetry</h2>
+                            <span class="badge-z3-sat" id="switch-collab-mode-pill">EMULATED</span>
+                        </div>
+                        <div class="operational-detail-box">
+                            <div class="op-row">
+                                <span class="op-label">Bridge Endpoint:</span>
+                                <span class="op-val" id="switch-collab-bridge-url">http://localhost:8080</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Switch Room ID:</span>
+                                <span class="op-val" id="switch-collab-room-id">cloudpilot-ops-room</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Agent ID:</span>
+                                <span class="op-val">cloudpilot-agent</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Inbound Protocol:</span>
+                                <span class="op-val">WebSocket (`/agents/{id}/connection/ws`)</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Outbound Channel:</span>
+                                <span class="op-val">HTTP REST (`/rooms/{id}/messages`)</span>
+                            </div>
+                            <div class="op-row">
+                                <span class="op-label">Truthful Status:</span>
+                                <span style="font-size: 11px; color: var(--text-secondary);" id="switch-collab-truthful-msg">Deterministic in-memory bridge active. Truthful external fallback verified.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-panel">
+                        <div class="panel-header">
+                            <h2 class="panel-title">Switch Collaboration Message Stream</h2>
+                            <span class="panel-meta">Published Room Events</span>
+                        </div>
+                        <ul id="switch-messages-list" style="list-style: none; padding: 0; margin: 0; max-height: 220px; overflow-y: auto;">
+                            <li style="padding: 8px; border-bottom: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-muted);">
+                                [Switch Room] Ready. Events published by CloudPilot will appear here.
+                            </li>
                         </ul>
                     </div>
                 </div>
             </section>
 
-            <!-- 2. AGENT ACTIVITY TIMELINE -->
-            <section class="view-panel" id="view-activity" aria-labelledby="heading-activity">
+            <!-- AREA G: AUDIT TRAIL -->
+            <section class="view-panel" id="view-audit-trail">
                 <div class="view-header">
                     <div>
-                        <h1 class="view-title" id="heading-activity">Agent Activity Timeline</h1>
-                        <p class="view-subtitle">Chronological, explainable event stream of autonomous agent thoughts, operations, and tool calls.</p>
+                        <h1 class="view-title">Area G: Correlated Audit Trail & Evidence Lineage</h1>
+                        <p class="view-subtitle">End-to-end cryptographic and persistent lineage correlating Task, Decision, Proposal, Approval, and Execution.</p>
                     </div>
-                    <div class="filter-group">
-                        <select id="activity-filter-agent" class="filter-select">
-                            <option value="ALL">All Agents</option>
-                            <option value="M1">M1 Discovery</option>
-                            <option value="M2">M2 Cost</option>
-                            <option value="M4">M4 Risk</option>
-                            <option value="M5">M5 Strategy</option>
-                            <option value="M6">M6 Digital Twin</option>
-                            <option value="M9">M9 Decision</option>
-                            <option value="M10">M10 Execution</option>
-                            <option value="TrueForge">TrueForge Runtime</option>
-                        </select>
-                    </div>
+                    <button class="btn-secondary" id="btn-refresh-audit">↻ Refresh Audit Log</button>
                 </div>
+
                 <div class="card-panel">
-                    <div class="timeline-container" id="full-activity-timeline">
-                        <!-- Populated dynamically via app.js -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- 3. AGENT WORKSPACE -->
-            <section class="view-panel" id="view-agent-workspace" aria-labelledby="heading-agent-workspace">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-agent-workspace">Agent Workspace</h1>
-                        <p class="view-subtitle">Deep inspection of individual autonomous intelligence modules, internal states, and tool invocations.</p>
-                    </div>
-                </div>
-                <div class="agent-tabs-bar" role="tablist">
-                    <button class="agent-nav-tab active" data-agent="M1">M1 Discovery</button>
-                    <button class="agent-nav-tab" data-agent="M2">M2 Cost</button>
-                    <button class="agent-nav-tab" data-agent="M3">M3 App Intelligence</button>
-                    <button class="agent-nav-tab" data-agent="M4">M4 Risk</button>
-                    <button class="agent-nav-tab" data-agent="M5">M5 Strategy</button>
-                    <button class="agent-nav-tab" data-agent="M6">M6 Digital Twin</button>
-                    <button class="agent-nav-tab" data-agent="M7">M7 Explainability</button>
-                    <button class="agent-nav-tab" data-agent="M8">M8 Learning</button>
-                    <button class="agent-nav-tab" data-agent="M9">M9 Decision Council</button>
-                    <button class="agent-nav-tab" data-agent="TrueForge">TrueForge Runtime</button>
-                </div>
-                <div class="card-panel" id="agent-workspace-content">
-                    <!-- Dynamic Agent Inspector loaded here -->
-                </div>
-            </section>
-
-            <!-- 4. INFRASTRUCTURE EXPLORER -->
-            <section class="view-panel" id="view-infrastructure" aria-labelledby="heading-infra">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-infra">Infrastructure Explorer</h1>
-                        <p class="view-subtitle">Discovered cloud resources across compute, database, storage, Kubernetes, and VPC networking.</p>
-                    </div>
-                    <div class="filter-group">
-                        <button class="btn-filter active" data-infra-filter="ALL">All (<span id="count-infra-all">0</span>)</button>
-                        <button class="btn-filter" data-infra-filter="COMPUTE">Compute</button>
-                        <button class="btn-filter" data-infra-filter="DATABASE">Databases</button>
-                        <button class="btn-filter" data-infra-filter="STORAGE">Storage</button>
-                        <button class="btn-filter" data-infra-filter="K8S">Kubernetes</button>
-                    </div>
-                </div>
-                <div class="table-card">
-                    <table class="data-table" id="infra-table">
-                        <thead>
-                            <tr>
-                                <th>Resource ID</th>
-                                <th>Type / Service</th>
-                                <th>Environment</th>
-                                <th>Criticality</th>
-                                <th>State</th>
-                                <th>Monthly Cost</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="infra-table-body">
-                            <!-- Populated dynamically -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- 5. COST INTELLIGENCE -->
-            <section class="view-panel" id="view-cost" aria-labelledby="heading-cost">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-cost">Cost Intelligence (M2)</h1>
-                        <p class="view-subtitle">Billing baselines, service cost breakdowns, idle waste discovery, and multi-horizon forecasts.</p>
-                    </div>
-                </div>
-                <div class="cards-grid-3">
-                    <div class="card-panel">
-                        <h3 class="panel-subtitle">Current Monthly Spend</h3>
-                        <div class="large-stat" id="cost-monthly-spend">$0.00</div>
-                        <p class="stat-desc">Aggregated baseline across all accounts</p>
-                    </div>
-                    <div class="card-panel">
-                        <h3 class="panel-subtitle">Identified Waste</h3>
-                        <div class="large-stat text-amber" id="cost-waste-spend">$0.00</div>
-                        <p class="stat-desc">Idle instances, unattached EBS, overprovisioned RDS</p>
-                    </div>
-                    <div class="card-panel">
-                        <h3 class="panel-subtitle">Potential Savings</h3>
-                        <div class="large-stat text-emerald" id="cost-potential-spend">$0.00</div>
-                        <p class="stat-desc">Achievable via rightsizing & policy automation</p>
-                    </div>
-                </div>
-                <div class="card-panel">
-                    <h3 class="panel-title">Cost Forecast (No-Action Projection)</h3>
-                    <div class="forecast-bars" id="cost-forecast-container">
-                        <div class="forecast-col">
-                            <span class="forecast-period">30 Days</span>
-                            <span class="forecast-delta text-amber">+6.2% ($ spend increase)</span>
-                            <span class="forecast-note">Normal organic data growth</span>
-                        </div>
-                        <div class="forecast-col">
-                            <span class="forecast-period">90 Days</span>
-                            <span class="forecast-delta text-amber">+17.8% ($ spend increase)</span>
-                            <span class="forecast-note">Compounded storage & autoscaling</span>
-                        </div>
-                        <div class="forecast-col">
-                            <span class="forecast-period">365 Days</span>
-                            <span class="forecast-delta text-crimson">+43.5% ($ spend increase)</span>
-                            <span class="forecast-note">Unmanaged cluster sprawl</span>
+                    <h3 class="panel-title" style="margin-bottom: 12px;">Traceable Governance Lineage</h3>
+                    <div id="audit-timeline-container" style="padding: 8px 0;">
+                        <div class="audit-item success">
+                            <div style="font-size: 12px; font-weight: 600; color: var(--text-primary);">Subsystem Initialization</div>
+                            <div style="font-size: 11px; color: var(--text-secondary);">FastAPI Monolith v4.3.0 started. SQLite repository loaded.</div>
                         </div>
                     </div>
-                </div>
-            </section>
-
-            <!-- 6. RISK EXPLORER -->
-            <section class="view-panel" id="view-risk" aria-labelledby="heading-risk">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-risk">Risk Explorer (M4)</h1>
-                        <p class="view-subtitle">Blast radius analysis, single points of failure (SPOFs), SLO breach probabilities, and dependency failure paths.</p>
-                    </div>
-                </div>
-                <div class="card-panel">
-                    <h3 class="panel-title">Active Risk Assessments</h3>
-                    <div class="risk-assessments-list" id="risk-assessments-container">
-                        <!-- Populated dynamically -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- 7. STRATEGY WORKSPACE -->
-            <section class="view-panel" id="view-strategy" aria-labelledby="heading-strategy">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-strategy">Strategy Workspace (M5)</h1>
-                        <p class="view-subtitle">Candidate optimization opportunities, priority matrices, and actionable execution roadmaps.</p>
-                    </div>
-                </div>
-                <div class="card-panel">
-                    <h3 class="panel-title">Synthesized Optimization Strategies</h3>
-                    <div class="recommendations-container" id="strategy-recommendations-container">
-                        <!-- Populated dynamically -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- 8. DIGITAL TWIN -->
-            <section class="view-panel" id="view-digital-twin" aria-labelledby="heading-twin">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-twin">Digital Twin Virtual Simulator (M6)</h1>
-                        <p class="view-subtitle">Pre-execution virtual simulation: counterfactual testing of cost reduction, latency impact, and SLA preservation.</p>
-                    </div>
-                    <button class="btn-primary" id="btn-run-simulation">Execute Simulation Test</button>
-                </div>
-                <div class="card-panel">
-                    <div class="simulation-comparison-grid">
-                        <div class="sim-card baseline">
-                            <h3>Current Baseline</h3>
-                            <div class="sim-metric"><span>Monthly Cost:</span> <strong id="sim-base-cost">$0.00</strong></div>
-                            <div class="sim-metric"><span>p99 Latency:</span> <strong>42.0 ms</strong></div>
-                            <div class="sim-metric"><span>Availability:</span> <strong>99.99%</strong></div>
-                            <div class="sim-metric"><span>Risk Level:</span> <strong>LOW</strong></div>
-                        </div>
-                        <div class="sim-card projected highlight-green">
-                            <h3>Simulated Post-Optimization</h3>
-                            <div class="sim-metric"><span>Monthly Cost:</span> <strong class="text-emerald" id="sim-proj-cost">$0.00</strong></div>
-                            <div class="sim-metric"><span>p99 Latency:</span> <strong>42.8 ms (+0.8ms)</strong></div>
-                            <div class="sim-metric"><span>Availability:</span> <strong>99.99% (Preserved)</strong></div>
-                            <div class="sim-metric"><span>Simulation Verdict:</span> <strong class="text-emerald">VERIFIED SAFE</strong></div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- 9. DECISION COUNCIL -->
-            <section class="view-panel" id="view-decision-council" aria-labelledby="heading-council">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-council">Decision Council (M9)</h1>
-                        <p class="view-subtitle">Multi-agent consensus voting: balancing cost reduction, architectural resilience, risk tolerance, and compliance.</p>
-                    </div>
-                </div>
-                <div class="card-panel">
-                    <div class="council-consensus-box">
-                        <div class="consensus-header">
-                            <span class="council-badge">Consensus Status: APPROVED</span>
-                            <span class="consensus-score">Overall Confidence: <strong>92.5%</strong></span>
-                        </div>
-                        <div class="council-votes-grid" id="council-votes-grid">
-                            <!-- Populated dynamically -->
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- 10. APPROVAL CENTER -->
-            <section class="view-panel" id="view-approvals" aria-labelledby="heading-approvals">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-approvals">Approval Center</h1>
-                        <p class="view-subtitle">Human-in-the-loop governance: review gated actions, inspect blast radius, and approve or reject.</p>
-                    </div>
-                </div>
-                <div class="card-panel">
-                    <div class="approvals-list" id="approvals-list-container">
-                        <!-- Populated dynamically -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- 11. EXECUTION CONSOLE -->
-            <section class="view-panel" id="view-execution" aria-labelledby="heading-exec">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-exec">Execution Console (M10 & TrueForge)</h1>
-                        <p class="view-subtitle">Live operational execution logs, sandbox run status, and active resource lock indicators.</p>
-                    </div>
-                </div>
-                <div class="terminal-panel">
-                    <div class="terminal-header">
-                        <span class="terminal-title">TrueForge Sandbox Execution Terminal</span>
-                        <span class="terminal-status" id="exec-terminal-status">IDLE</span>
-                    </div>
-                    <pre class="terminal-body" id="execution-terminal-log">
-[SYSTEM] Autonomous Execution Console initialized.
-[SYSTEM] Ready for authorized operational plans.
-                    </pre>
-                </div>
-            </section>
-
-            <!-- 12. ROLLBACK VIEW -->
-            <section class="view-panel" id="view-rollback" aria-labelledby="heading-rollback">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-rollback">Automated Rollback Center</h1>
-                        <p class="view-subtitle">Deterministic, idempotent, auditable, and validated automated rollbacks.</p>
-                    </div>
-                    <button class="btn-emergency-stop" id="btn-manual-rollback-trigger">Trigger Manual Rollback</button>
-                </div>
-                <div class="card-panel">
-                    <div class="rollback-history-list" id="rollback-history-container">
-                        <!-- Populated dynamically -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- 13. LEARNING TIMELINE -->
-            <section class="view-panel" id="view-learning" aria-labelledby="heading-learning">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-learning">Continuous Learning Loop (M8)</h1>
-                        <p class="view-subtitle">Organizational Cloud DNA profile, experience replay memories, and continuous improvement metrics.</p>
-                    </div>
-                </div>
-                <div class="card-panel">
-                    <h3 class="panel-title">Cloud DNA Behavioral Profile</h3>
-                    <div class="dna-metrics-grid" id="dna-metrics-container">
-                        <!-- Populated dynamically -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- 14. SAVINGS ATTRIBUTION -->
-            <section class="view-panel" id="view-attribution" aria-labelledby="heading-attribution">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-attribution">3-Way Savings Attribution</h1>
-                        <p class="view-subtitle">Rigorous economic breakdown: Predicted Savings vs. Verified Savings vs. Risk-Discounted Annualized Savings.</p>
-                    </div>
-                </div>
-                <div class="cards-grid-3">
-                    <div class="card-panel">
-                        <h3 class="panel-subtitle">1. Predicted Savings</h3>
-                        <div class="large-stat text-cyan" id="attr-predicted-val">$0.00</div>
-                        <p class="stat-desc">Ex-ante recommendation estimate</p>
-                    </div>
-                    <div class="card-panel highlight-green">
-                        <h3 class="panel-subtitle">2. Verified Savings</h3>
-                        <div class="large-stat text-emerald" id="attr-verified-val">$0.00</div>
-                        <p class="stat-desc">Ex-post measured monthly reduction</p>
-                    </div>
-                    <div class="card-panel">
-                        <h3 class="panel-subtitle">3. Annualized Savings</h3>
-                        <div class="large-stat" id="attr-annualized-val">$0.00</div>
-                        <p class="stat-desc">Risk-discounted 12-month run-rate</p>
-                    </div>
-                </div>
-                <div class="card-panel">
-                    <h3 class="panel-title">Realization Performance</h3>
-                    <div class="realization-bar-box">
-                        <div class="realization-bar-fill" id="attr-realization-fill" style="width: 100%;"></div>
-                    </div>
-                    <p class="stat-desc" id="attr-realization-desc">Realization Rate: 100.0% of predicted savings verified.</p>
-                </div>
-            </section>
-
-            <!-- 15. CLOUDPILOT COPILOT VIEW -->
-            <section class="view-panel" id="view-copilot-view" aria-labelledby="heading-copilot-view">
-                <div class="view-header">
-                    <div>
-                        <h1 class="view-title" id="heading-copilot-view">CloudPilot AI Copilot</h1>
-                        <p class="view-subtitle">Conversational platform assistant: ask questions, analyze risks, inspect topologies, or trigger operations.</p>
-                    </div>
-                </div>
-                <div class="copilot-full-container">
-                    <div class="copilot-conversation-box" id="copilot-chat-box">
-                        <div class="copilot-bubble assistant">
-                            Hello Operator. I am connected to CloudPilot's live intelligence pipeline, simulator, and governance engines. What operational objective or question can I assist you with?
-                        </div>
-                    </div>
-                    <div class="copilot-quick-prompts">
-                        <button class="prompt-chip" data-prompt="Why is my monthly spend increasing?">Why is my monthly spend increasing?</button>
-                        <button class="prompt-chip" data-prompt="Find idle compute instances and calculate waste">Find idle compute and waste</button>
-                        <button class="prompt-chip" data-prompt="What are our critical single points of failure?">What are our critical SPOFs?</button>
-                        <button class="prompt-chip" data-prompt="Are there any pending human approvals?">Check pending approvals</button>
-                    </div>
-                    <form class="copilot-input-row" id="copilot-form">
-                        <input type="text" id="copilot-query-input" placeholder="Type an operational question or command..." required autocomplete="off">
-                        <button type="submit" class="btn-primary">Send Query</button>
-                    </form>
                 </div>
             </section>
 
         </main>
-    </div>
-
-    <!-- Universal Expandable Evidence Modal -->
-    <div class="modal-backdrop" id="evidence-modal" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-header">
-                <h3 class="modal-title" id="modal-evidence-title">Operational Evidence & Audit Proof</h3>
-                <button class="modal-close-btn" id="modal-evidence-close" aria-label="Close modal">✕</button>
-            </div>
-            <div class="modal-body" id="modal-evidence-body">
-                <pre class="evidence-json" id="modal-evidence-pre"></pre>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-secondary" id="modal-evidence-done">Close</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Human Approval Modal -->
-    <div class="modal-backdrop" id="approval-modal" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-header">
-                <h3 class="modal-title" id="modal-approval-title">Human Authorization Decision</h3>
-                <button class="modal-close-btn" id="modal-approval-close" aria-label="Close modal">✕</button>
-            </div>
-            <div class="modal-body">
-                <p id="modal-approval-desc"></p>
-                <div class="form-group">
-                    <label for="approval-approver-input">Operator Name / Identity</label>
-                    <input type="text" id="approval-approver-input" class="form-input" value="Lead-Architect" required>
-                </div>
-                <div class="form-group">
-                    <label for="approval-reason-input">Decision Rationale / Notes</label>
-                    <textarea id="approval-reason-input" class="form-textarea" placeholder="Provide reason for approval or rejection..."></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-emergency-stop" id="modal-approval-reject-btn">Reject Action</button>
-                <button class="btn-primary" id="modal-approval-approve-btn">Authorize Execution</button>
-            </div>
-        </div>
     </div>
 
     <script src="app.js"></script>
